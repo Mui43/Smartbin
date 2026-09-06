@@ -1,0 +1,17 @@
+node_modules/
+.next/
+
+.env
+.env.local
+.env.production
+
+dist/
+coverage/
+
+mongo_data/
+
+mosquitto/data/
+mosquitto/log/
+
+*.log
+.DS_Store
