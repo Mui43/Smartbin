@@ -1,2 +1,1 @@
-this is a smartbin project
-this project for 1/11
+this is a smartbin project 1/11 
