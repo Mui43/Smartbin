@@ -1,17 +1,25 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IBin extends Document {
+  binId: string;
   name: string;
   location: string;
   mqttTopic: string;
   thresholdPct: number;
   createdAt: Date;
   updatedAt: Date;
-  binId: string;
 }
 
 const binSchema = new Schema<IBin>(
   {
+    binId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      trim: true,
+    },
+
     name: {
       type: String,
       required: true,
@@ -38,21 +46,10 @@ const binSchema = new Schema<IBin>(
       max: 100,
       default: 85,
     },
-    binId: {
-      type: String,
-      required: true,
-      unique: true,
-      index: true,
-      trim: true,
-    },
   },
-
   {
     timestamps: true,
   }
 );
 
-export const Bin = mongoose.model<IBin>(
-  "Bin",
-  binSchema
-);
+export const Bin = mongoose.model<IBin>("Bin", binSchema);

@@ -6,35 +6,25 @@ const router = Router();
 
 router.get("/", async (_req, res) => {
   try {
-    const bins = await Bin.find()
-      .sort({ name: 1 })
-      .lean();
+    const bins = await Bin.find().sort({ name: 1 }).lean();
 
     const result = await Promise.all(
       bins.map(async (bin) => {
-        const latest =
-          await Telemetry.findOne({
-            binId: bin._id.toString(),
-          })
-            .sort({ timestamp: -1 })
-            .lean();
+        const latest = await Telemetry.findOne({
+          binId: bin.binId,
+        })
+          .sort({ timestamp: -1 })
+          .lean();
 
         return {
-          id: bin._id,
+          id: bin.binId,
           name: bin.name,
           location: bin.location,
           thresholdPct: bin.thresholdPct,
-
           level: latest?.level ?? null,
-
-          batteryPct:
-            latest?.batteryPct ?? null,
-
-          voltage:
-            latest?.voltage ?? null,
-
-          lastSeen:
-            latest?.timestamp ?? null,
+          batteryPct: latest?.batteryPct ?? null,
+          voltage: latest?.voltage ?? null,
+          lastSeen: latest?.timestamp ?? null,
         };
       })
     );
