@@ -69,7 +69,6 @@ const telemetrySchema = new Schema<ITelemetry>(
       index: true,
     },
   },
-
   {
     timestamps: true,
   }
@@ -81,7 +80,4 @@ telemetrySchema.index({
 });
 
 export const Telemetry =
-  mongoose.model<ITelemetry>(
-    "Telemetry",
-    telemetrySchema
-  );
+  mongoose.model<ITelemetry>("Telemetry", telemetrySchema);
