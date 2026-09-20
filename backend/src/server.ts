@@ -16,6 +16,7 @@ import authRouter from "./routes/auth.js";
 import logsRouter from "./routes/logs.js";
 import exportRouter from "./routes/export.js";
 import dashboardRouter from "./routes/dashboard.js";
+import deviceRouter from "./routes/device";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -42,7 +43,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/logs", logsRouter);
 app.use("/api/export", exportRouter);
 app.use("/api/dashboard", dashboardRouter);
-
+app.use("/api/device", deviceRouter);
 
 app.use((_req, res) => {
   res.status(404).json({
