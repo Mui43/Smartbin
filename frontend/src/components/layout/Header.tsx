@@ -35,7 +35,7 @@ export default function Header() {
       ========================= */}
 
       <div>
-        <p className="mb-1 text-sm font-medium text-[#8EB69B]">
+        <p className="mb-1 text-sm font-medium text-[#90AB8B]">
           IoT Monitoring
         </p>
 
@@ -44,14 +44,14 @@ export default function Header() {
             text-2xl
             font-bold
             tracking-tight
-            text-[#DAF1DE]
+            text-[#EBF4DD]
             sm:text-3xl
           "
         >
           Smart Bin Monitoring
         </h1>
 
-        <p className="mt-1 text-sm text-[#8EB69B]">
+        <p className="mt-1 text-sm text-[#90AB8B]">
           Solar-Powered Recycling Waste Sorting System
         </p>
       </div>
@@ -63,11 +63,11 @@ export default function Header() {
       <div className="flex items-center justify-between gap-3 sm:justify-end">
         <div className="flex items-center gap-3">
           <div className="hidden text-right sm:block">
-            <p className="text-sm font-semibold text-[#DAF1DE]">
+            <p className="text-sm font-semibold text-[#EBF4DD]">
               {displayName}
             </p>
 
-            <p className="mt-1 text-xs capitalize text-[#8EB69B]">
+            <p className="mt-1 text-xs capitalize text-[#90AB8B]">
               {session?.user?.role || "guest"}
             </p>
           </div>
@@ -81,9 +81,9 @@ export default function Header() {
               items-center
               justify-center
               rounded-full
-              bg-[#8EB69B]
+              bg-[#90AB8B]
               font-bold
-              text-[#051F20]
+              text-[#202A30]
               shadow-lg
             "
           >
