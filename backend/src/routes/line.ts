@@ -74,7 +74,10 @@ router.post(
         console.log("========================================\n");
 
         // Check Whitelist
-        if (!userId || !allowedUserIds.includes(userId)) {
+        // 🟢 ถ้ากำหนด ALLOWED_USER_IDS เป็น "*" หรือไม่มีการระบุ ให้ข้ามการเช็ค Whitelist (อนุญาตทุกคน)
+        const allowAll = process.env.ALLOWED_USER_IDS === "*";
+
+        if (!allowAll && (!userId || !allowedUserIds.includes(userId))) {
           console.warn(
             `⚠️ Unauthorized access attempt from User ID: ${userId}`,
           );
