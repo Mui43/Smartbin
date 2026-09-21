@@ -6,21 +6,9 @@ import { useSession } from "next-auth/react";
 import { useState } from "react";
 
 const menuItems = [
-  {
-    name: "Dashboard",
-    href: "/",
-    icon: "📊",
-  },
-  {
-    name: "History",
-    href: "/history",
-    icon: "📜",
-  },
-  {
-    name: "Devices",
-    href: "/devices",
-    icon: "🗑️",
-  },
+  { name: "Dashboard", href: "/", icon: "📊" },
+  { name: "History", href: "/history", icon: "📜" },
+  { name: "Devices", href: "/devices", icon: "🗑️" },
   {
     name: "Notifications",
     href: "/notifications",
@@ -43,45 +31,39 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
 
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  const isAdmin = session?.user?.role === "admin";
+  const isAdmin =
+    session?.user?.role === "admin";
 
   const visibleItems = menuItems.filter(
-    (item) => !item.adminOnly || isAdmin
+    (item) =>
+      !item.adminOnly || isAdmin
   );
-
-  function closeMobileMenu() {
-    setMobileOpen(false);
-  }
 
   return (
     <>
-      {/* =========================
-          Mobile Menu Button
-      ========================= */}
+      {/* Mobile button */}
 
       <button
-        onClick={() => setMobileOpen(true)}
+        onClick={() => setOpen(true)}
         className="
           fixed
           left-4
           top-4
           z-50
           flex
-          h-11
-          w-11
+          h-10
+          w-10
           items-center
           justify-center
           rounded-xl
           border
-          border-[#235347]
-          bg-[#0B2B26]
-          text-xl
-          text-[#DAF1DE]
+          border-[#5A7863]/40
+          bg-[#3B4953]
+          text-lg
+          text-[#EBF4DD]
           shadow-lg
-          transition
-          hover:bg-[#235347]
           lg:hidden
         "
         aria-label="Open menu"
@@ -89,11 +71,9 @@ export default function Sidebar() {
         ☰
       </button>
 
-      {/* =========================
-          Mobile Overlay
-      ========================= */}
+      {/* Overlay */}
 
-      {mobileOpen && (
+      {open && (
         <button
           className="
             fixed
@@ -103,14 +83,12 @@ export default function Sidebar() {
             backdrop-blur-sm
             lg:hidden
           "
-          onClick={closeMobileMenu}
+          onClick={() => setOpen(false)}
           aria-label="Close menu"
         />
       )}
 
-      {/* =========================
-          Sidebar
-      ========================= */}
+      {/* Sidebar */}
 
       <aside
         className={`
@@ -122,183 +100,136 @@ export default function Sidebar() {
           h-screen
           w-64
           flex-col
-          bg-[#0B2B26]
+          border-r
+          border-[#5A7863]/30
+          bg-[#3B4953]
           shadow-2xl
           transition-transform
           duration-300
-
+          lg:translate-x-0
           ${
-            mobileOpen
+            open
               ? "translate-x-0"
-              : "-translate-x-full lg:translate-x-0"
+              : "-translate-x-full"
           }
         `}
       >
-        {/* =========================
-            Logo
-        ========================= */}
+        {/* Logo */}
 
-        <div className="border-b border-[#235347]/50 p-6">
+        <div className="border-b border-[#5A7863]/30 p-5">
           <div className="flex items-center justify-between">
             <Link
               href="/"
-              onClick={closeMobileMenu}
+              onClick={() =>
+                setOpen(false)
+              }
               className="flex items-center gap-3"
             >
               <div
                 className="
                   flex
-                  h-11
-                  w-11
+                  h-10
+                  w-10
                   items-center
                   justify-center
-                  rounded-2xl
-                  bg-[#235347]
+                  rounded-xl
+                  bg-[#5A7863]
                   text-xl
-                  shadow-lg
                 "
               >
                 🗑️
               </div>
 
               <div>
-                <h1 className="font-bold text-[#DAF1DE]">
+                <h1 className="font-bold text-[#EBF4DD]">
                   Smart Bin
                 </h1>
 
-                <p className="text-xs text-[#8EB69B]">
+                <p className="text-xs text-[#90AB8B]">
                   Monitoring System
                 </p>
               </div>
             </Link>
 
-            {/* Mobile Close */}
+            {/* Mobile close */}
 
             <button
-              onClick={closeMobileMenu}
+              onClick={() =>
+                setOpen(false)
+              }
               className="
-                flex
-                h-9
-                w-9
-                items-center
-                justify-center
                 rounded-lg
-                text-[#8EB69B]
-                transition
-                hover:bg-[#163831]
-                hover:text-[#DAF1DE]
+                px-2
+                py-1
+                text-[#90AB8B]
+                hover:bg-[#202A30]
                 lg:hidden
               "
-              aria-label="Close menu"
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* =========================
-            Navigation
-        ========================= */}
+        {/* Navigation */}
 
-        <nav className="flex-1 space-y-2 overflow-y-auto p-4">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-4">
           {visibleItems.map((item) => {
-            const active = pathname === item.href;
+            const active =
+              pathname === item.href;
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={closeMobileMenu}
+                onClick={() =>
+                  setOpen(false)
+                }
                 className={`
-                  group
                   flex
                   items-center
                   gap-3
                   rounded-xl
                   px-4
                   py-3
-                  transition-all
-                  duration-200
-
+                  transition
                   ${
                     active
-                      ? "bg-[#235347] text-[#DAF1DE] shadow-lg"
-                      : "text-[#8EB69B] hover:bg-[#163831] hover:text-[#DAF1DE]"
+                      ? "bg-[#5A7863] text-[#EBF4DD] shadow"
+                      : "text-[#90AB8B] hover:bg-[#202A30] hover:text-[#EBF4DD]"
                   }
                 `}
               >
-                <span
-                  className={`
-                    text-lg
-                    transition-transform
-                    duration-200
-                    ${
-                      active
-                        ? "scale-110"
-                        : "group-hover:scale-110"
-                    }
-                  `}
-                >
+                <span className="text-lg">
                   {item.icon}
                 </span>
 
                 <span className="font-medium">
                   {item.name}
                 </span>
-
-                {active && (
-                  <span className="ml-auto h-2 w-2 rounded-full bg-[#8EB69B]" />
-                )}
               </Link>
             );
           })}
         </nav>
 
-        {/* =========================
-            User
-        ========================= */}
+        {/* User */}
 
-        <div className="border-t border-[#235347]/50 p-4">
-          <div className="rounded-xl border border-[#235347]/40 bg-[#051F20] p-3">
-            <div className="flex items-center gap-3">
-              <div
-                className="
-                  flex
-                  h-9
-                  w-9
-                  shrink-0
-                  items-center
-                  justify-center
-                  rounded-full
-                  bg-[#8EB69B]
-                  font-bold
-                  text-[#051F20]
-                "
-              >
-                {(
-                  session?.user?.name ||
-                  session?.user?.email ||
-                  "G"
-                )
-                  .charAt(0)
-                  .toUpperCase()}
-              </div>
+        <div className="border-t border-[#5A7863]/30 p-4">
+          <div className="rounded-xl bg-[#202A30] p-3">
+            <p className="truncate text-sm font-medium text-[#EBF4DD]">
+              {session?.user?.name ||
+                session?.user?.email ||
+                "Guest"}
+            </p>
 
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#DAF1DE]">
-                  {session?.user?.name ||
-                    session?.user?.email ||
-                    "Guest"}
-                </p>
-
-                <p className="mt-1 text-xs capitalize text-[#8EB69B]">
-                  {session?.user?.role || "guest"}
-                </p>
-              </div>
-            </div>
+            <p className="mt-1 text-xs text-[#90AB8B]">
+              Role:{" "}
+              {session?.user?.role ||
+                "guest"}
+            </p>
           </div>
         </div>
       </aside>
     </>
   );
-} 
+}

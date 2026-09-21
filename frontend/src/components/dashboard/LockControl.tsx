@@ -65,28 +65,28 @@ export default function LockControl({
   }
 
   return (
-    <div className="rounded-2xl border border-[#235347]/40 bg-[#163831] p-5 shadow-xl sm:p-6">
+    <div className="rounded-2xl border border-[#5A7863]/40 bg-[#3B4953] p-5 shadow-xl sm:p-6">
       {/* Header */}
 
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-[#8EB69B]">
+          <p className="text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
             Security
           </p>
 
-          <h2 className="mt-1 text-xl font-bold text-[#DAF1DE]">
+          <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">
             Bin Lock
           </h2>
         </div>
 
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#235347] text-xl">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#5A7863] text-xl">
           {locked ? "🔒" : "🔓"}
         </div>
       </div>
 
       {/* Status */}
 
-      <div className="mt-6 rounded-xl border border-[#235347]/40 bg-[#0B2B26] p-5">
+      <div className="mt-6 rounded-xl border border-[#5A7863]/40 bg-[#0B2B26] p-5">
         <div className="flex items-center gap-4">
           <div
             className={`
@@ -99,8 +99,8 @@ export default function LockControl({
               rounded-2xl
               ${
                 locked
-                  ? "bg-[#235347] text-[#DAF1DE]"
-                  : "bg-[#8EB69B]/20 text-[#8EB69B]"
+                  ? "bg-[#5A7863] text-[#EBF4DD]"
+                  : "bg-[#90AB8B]/20 text-[#90AB8B]"
               }
             `}
           >
@@ -110,11 +110,11 @@ export default function LockControl({
           </div>
 
           <div>
-            <p className="text-sm text-[#8EB69B]">
+            <p className="text-sm text-[#90AB8B]">
               Current Status
             </p>
 
-            <p className="mt-1 text-lg font-bold text-[#DAF1DE]">
+            <p className="mt-1 text-lg font-bold text-[#EBF4DD]">
               {locked ? "Locked" : "Unlocked"}
             </p>
           </div>
@@ -131,14 +131,14 @@ export default function LockControl({
             className="
               rounded-xl
               border
-              border-[#235347]
+              border-[#5A7863]
               bg-[#0B2B26]
               px-4
               py-3
               font-medium
-              text-[#DAF1DE]
+              text-[#EBF4DD]
               transition
-              hover:bg-[#235347]
+              hover:bg-[#5A7863]
               disabled:cursor-not-allowed
               disabled:opacity-40
             "
@@ -151,13 +151,13 @@ export default function LockControl({
             disabled={loading || !locked}
             className="
               rounded-xl
-              bg-[#8EB69B]
+              bg-[#90AB8B]
               px-4
               py-3
               font-medium
-              text-[#051F20]
+              text-[#202A30]
               transition
-              hover:bg-[#DAF1DE]
+              hover:bg-[#EBF4DD]
               disabled:cursor-not-allowed
               disabled:opacity-40
             "
@@ -166,13 +166,13 @@ export default function LockControl({
           </button>
         </div>
       ) : (
-        <div className="mt-4 rounded-xl border border-[#235347]/40 bg-[#0B2B26] p-4 text-center text-sm text-[#8EB69B]">
+        <div className="mt-4 rounded-xl border border-[#5A7863]/40 bg-[#0B2B26] p-4 text-center text-sm text-[#90AB8B]">
           Your role does not have permission to control the lock.
         </div>
       )}
 
       {loading && (
-        <p className="mt-3 text-center text-xs text-[#8EB69B]">
+        <p className="mt-3 text-center text-xs text-[#90AB8B]">
           Sending command...
         </p>
       )}

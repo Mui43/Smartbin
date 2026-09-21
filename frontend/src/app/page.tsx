@@ -24,7 +24,7 @@ export default function Home() {
   } = useAlerts();
 
   return (
-    <main className="min-h-screen bg-[#051F20] text-[#DAF1DE]">
+    <main className="min-h-screen bg-[h] text-[#EBF4DD]">
       {/* Sidebar */}
 
       <Sidebar />
@@ -54,8 +54,8 @@ export default function Home() {
             justify-between
             rounded-xl
             border
-            border-[#235347]/40
-            bg-[#0B2B26]
+            border-[#5A7863]/40
+            bg-[#3B4953]
             px-4
             py-3
           "
@@ -67,20 +67,20 @@ export default function Home() {
                 w-2.5
                 rounded-full
                 ${connected
-                  ? "bg-[#8EB69B] shadow-[0_0_10px_#8EB69B]"
+                  ? "bg-[#90AB8B] shadow-[0_0_10px_#90AB8B]"
                   : "bg-red-400"
                 }
               `}
             />
 
-            <span className="text-sm text-[#8EB69B]">
+            <span className="text-sm text-[#90AB8B]">
               {connected
                 ? "Realtime Connected"
                 : "Disconnected"}
             </span>
           </div>
 
-          <span className="hidden text-xs text-[#8EB69B]/60 sm:block">
+          <span className="hidden text-xs text-[#90AB8B]/60 sm:block">
             MQTT / SSE
           </span>
         </div>
@@ -106,8 +106,8 @@ export default function Home() {
               justify-center
               rounded-2xl
               border
-              border-[#235347]/40
-              bg-[#163831]
+              border-[#5A7863]/40
+              bg-[#3B4953]
               p-6
               shadow-xl
             "
@@ -117,11 +117,11 @@ export default function Home() {
                 🗑️
               </div>
 
-              <p className="font-medium text-[#DAF1DE]">
+              <p className="font-medium text-[#EBF4DD]">
                 Waiting for telemetry...
               </p>
 
-              <p className="mt-2 text-sm text-[#8EB69B]">
+              <p className="mt-2 text-sm text-[#90AB8B]">
                 Waiting for data from Smart Bin
               </p>
             </div>
@@ -172,19 +172,19 @@ export default function Home() {
                 mt-6
                 rounded-2xl
                 border
-                border-[#235347]/40
-                bg-[#163831]
+                border-[#5A7863]/40
+                bg-[#3B4953]
                 p-5
                 shadow-xl
                 sm:p-6
               "
             >
               <div className="mb-5">
-                <p className="text-xs font-medium uppercase tracking-wider text-[#8EB69B]">
+                <p className="text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
                   Monitoring
                 </p>
 
-                <h2 className="mt-1 text-xl font-bold text-[#DAF1DE]">
+                <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">
                   Sensor Status
                 </h2>
               </div>
@@ -252,7 +252,7 @@ function Sensor({
   const isOffline = status === "offline";
 
   const statusColor = isOk
-    ? "text-[#8EB69B]"
+    ? "text-[#90AB8B]"
     : isWarning
       ? "text-yellow-300"
       : isOffline
@@ -260,7 +260,7 @@ function Sensor({
         : "text-red-400";
 
   const statusBackground = isOk
-    ? "bg-[#235347]/40"
+    ? "bg-[#5A7863]/40"
     : isWarning
       ? "bg-yellow-400/10"
       : isOffline
@@ -272,17 +272,17 @@ function Sensor({
       className="
         rounded-xl
         border
-        border-[#235347]/40
-        bg-[#0B2B26]
+        border-[#5A7863]/40
+        bg-[#3B4953]
         p-4
         transition
         duration-200
-        hover:border-[#8EB69B]/40
-        hover:bg-[#235347]/30
+        hover:border-[#90AB8B]/40
+        hover:bg-[#5A7863]/30
       "
     >
       <div className="flex items-center justify-between">
-        <p className="text-sm text-[#8EB69B]">
+        <p className="text-sm text-[#90AB8B]">
           {name}
         </p>
 
@@ -308,7 +308,7 @@ function Sensor({
             h-3
             w-3
             rounded-full
-            ${isOk ? "bg-[#8EB69B]" : ""}
+            ${isOk ? "bg-[#90AB8B]" : ""}
             ${isWarning
               ? "bg-yellow-300"
               : ""

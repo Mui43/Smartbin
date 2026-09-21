@@ -27,40 +27,40 @@ export default function SolarBattery({
       ? "text-red-400"
       : battery <= 50
         ? "text-yellow-300"
-        : "text-[#8EB69B]";
+        : "text-[#90AB8B]";
 
   const batteryBar =
     battery <= 20
       ? "bg-red-400"
       : battery <= 50
         ? "bg-yellow-300"
-        : "bg-[#8EB69B]";
+        : "bg-[#90AB8B]";
 
   return (
-    <div className="rounded-2xl border border-[#235347]/40 bg-[#163831] p-5 shadow-xl sm:p-6">
+    <div className="rounded-2xl border border-[#5A7863]/40 bg-[#3B4953] p-5 shadow-xl sm:p-6">
       {/* Header */}
 
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-[#8EB69B]">
+          <p className="text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
             Power
           </p>
 
-          <h2 className="mt-1 text-xl font-bold text-[#DAF1DE]">
+          <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">
             Solar & Battery
           </h2>
         </div>
 
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#235347] text-xl">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#5A7863] text-xl">
           ☀️
         </div>
       </div>
 
       {/* Battery */}
 
-      <div className="mt-6 rounded-xl border border-[#235347]/40 bg-[#0B2B26] p-4">
+      <div className="mt-6 rounded-xl border border-[#5A7863]/40 bg-[#3B4953] p-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-[#8EB69B]">
+          <span className="text-sm text-[#90AB8B]">
             Battery Level
           </span>
 
@@ -74,12 +74,12 @@ export default function SolarBattery({
             {battery}%
           </span>
 
-          <span className="text-sm text-[#8EB69B]">
+          <span className="text-sm text-[#90AB8B]">
             Battery
           </span>
         </div>
 
-        <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#051F20]">
+        <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#202A30]">
           <div
             className={`h-full rounded-full transition-all duration-500 ${batteryBar}`}
             style={{ width: `${battery}%` }}
@@ -90,25 +90,25 @@ export default function SolarBattery({
       {/* Voltage */}
 
       <div className="mt-4 grid grid-cols-2 gap-4">
-        <div className="rounded-xl border border-[#235347]/40 bg-[#0B2B26] p-4">
-          <p className="text-xs text-[#8EB69B]">
+        <div className="rounded-xl border border-[#5A7863]/40 bg-[#3B4953] p-4">
+          <p className="text-xs text-[#90AB8B]">
             Voltage
           </p>
 
-          <p className="mt-2 text-xl font-bold text-[#DAF1DE]">
+          <p className="mt-2 text-xl font-bold text-[#EBF4DD]">
             {telemetry.voltage.toFixed(1)}
-            <span className="ml-1 text-sm font-normal text-[#8EB69B]">
+            <span className="ml-1 text-sm font-normal text-[#90AB8B]">
               V
             </span>
           </p>
         </div>
 
-        <div className="rounded-xl border border-[#235347]/40 bg-[#0B2B26] p-4">
-          <p className="text-xs text-[#8EB69B]">
+        <div className="rounded-xl border border-[#5A7863]/40 bg-[#3B4953] p-4">
+          <p className="text-xs text-[#90AB8B]">
             Power Source
           </p>
 
-          <p className="mt-2 text-xl font-bold text-[#8EB69B]">
+          <p className="mt-2 text-xl font-bold text-[#90AB8B]">
             Solar
           </p>
         </div>
