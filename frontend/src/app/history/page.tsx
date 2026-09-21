@@ -4,23 +4,27 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 
 import Sidebar from "@/components/layout/Sidebar";
-import Header from "@/components/layout/Header";
-
-import {
-  useTelemetryHistory,
-} from "@/hooks/useTelemetryHistory";
+import { useTelemetryHistory } from "@/hooks/useTelemetryHistory";
 
 interface Bin {
-  _id: string;
+  _id?: string;
+  id?: string;
   binId: string;
   name: string;
   location: string;
 }
 
-export default function HistoryPage() {
-  const { data: session, status } = useSession();
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:4000";
 
-  const [bins, setBins] = useState<Bin[]>([]);
+export default function HistoryPage() {
+  const { data: session, status } =
+    useSession();
+
+  const [bins, setBins] =
+    useState<Bin[]>([]);
+
   const [selectedBin, setSelectedBin] =
     useState("");
 
@@ -30,27 +34,25 @@ export default function HistoryPage() {
   const [endDate, setEndDate] =
     useState("");
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] =
+    useState(1);
 
-  const [binsLoading, setBinsLoading] =
+  const [loadingBins, setLoadingBins] =
     useState(true);
 
-  const [binsError, setBinsError] =
-    useState("");
+  const [exporting, setExporting] =
+    useState(false);
 
   useEffect(() => {
     async function loadBins() {
       if (!session?.user?.accessToken) {
-        setBinsLoading(false);
+        setLoadingBins(false);
         return;
       }
 
-      setBinsLoading(true);
-      setBinsError("");
-
       try {
         const response = await fetch(
-          "http://localhost:4000/api/bins",
+          `${API_URL}/api/bins`,
           {
             headers: {
               Authorization: `Bearer ${session.user.accessToken}`,
@@ -59,22 +61,21 @@ export default function HistoryPage() {
           }
         );
 
-        const result = await response.json();
+        const result =
+          await response.json();
 
-        if (!response.ok) {
-          setBinsError(
-            result?.error?.message ||
-            "ไม่สามารถโหลดรายการถังได้"
-          );
-          return;
-        }
+        if (
+          response.ok &&
+          result.success
+        ) {
+          const list =
+            result.data || [];
 
-        if (result.success) {
-          setBins(result.data);
+          setBins(list);
 
-          if (result.data.length > 0) {
+          if (list.length > 0) {
             setSelectedBin(
-              result.data[0].binId
+              list[0].binId
             );
           }
         }
@@ -83,36 +84,52 @@ export default function HistoryPage() {
           "Load bins error:",
           error
         );
-
-        setBinsError(
-          "ไม่สามารถเชื่อมต่อ Backend ได้"
-        );
       } finally {
-        setBinsLoading(false);
+        setLoadingBins(false);
       }
     }
 
-    loadBins();
-  }, [session]);
-
-  const [exporting, setExporting] =
-    useState(false);
-
-  async function handleExportCsv() {
-    if (!session?.user?.accessToken) {
-      alert("กรุณาเข้าสู่ระบบ");
-      return;
+    if (
+      status === "authenticated"
+    ) {
+      loadBins();
     }
+  }, [status, session]);
 
-    if (!selectedBin) {
-      alert("กรุณาเลือก Bin");
+  useEffect(() => {
+    setPage(1);
+  }, [
+    selectedBin,
+    startDate,
+    endDate,
+  ]);
+
+  const {
+    data,
+    pagination,
+    loading,
+    error,
+  } = useTelemetryHistory(
+    selectedBin,
+    10,
+    page,
+    startDate,
+    endDate
+  );
+
+  async function handleExport() {
+    if (
+      !session?.user?.accessToken ||
+      !selectedBin
+    ) {
       return;
     }
 
     try {
       setExporting(true);
 
-      const params = new URLSearchParams();
+      const params =
+        new URLSearchParams();
 
       params.set(
         "binId",
@@ -133,23 +150,19 @@ export default function HistoryPage() {
         );
       }
 
-      const response = await fetch(
-        `http://localhost:4000/api/export/telemetry?${params.toString()}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${session.user.accessToken}`,
-          },
-        }
-      );
+      const response =
+        await fetch(
+          `${API_URL}/api/export/telemetry?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.user.accessToken}`,
+            },
+          }
+        );
 
       if (!response.ok) {
-        const result =
-          await response.json();
-
         throw new Error(
-          result?.error?.message ||
-          "Export CSV failed"
+          "Export failed"
         );
       }
 
@@ -169,7 +182,9 @@ export default function HistoryPage() {
       link.download =
         `telemetry-${selectedBin}.csv`;
 
-      document.body.appendChild(link);
+      document.body.appendChild(
+        link
+      );
 
       link.click();
 
@@ -180,119 +195,118 @@ export default function HistoryPage() {
       );
     } catch (error) {
       console.error(
-        "CSV export error:",
+        "Export CSV error:",
         error
       );
 
       alert(
-        error instanceof Error
-          ? error.message
-          : "ไม่สามารถ Export CSV ได้"
+        "ไม่สามารถ Export CSV ได้"
       );
     } finally {
       setExporting(false);
     }
   }
 
-  function handleBinChange(
-    value: string
-  ) {
-    setSelectedBin(value);
-    setPage(1);
-  }
-
-  function handleStartDateChange(
-    value: string
-  ) {
-    setStartDate(value);
-    setPage(1);
-  }
-
-  function handleEndDateChange(
-    value: string
-  ) {
-    setEndDate(value);
-    setPage(1);
-  }
-
-  function resetFilter() {
-    setStartDate("");
-    setEndDate("");
-    setPage(1);
-  }
-
   if (status === "loading") {
-    return (
-      <main className="min-h-screen bg-[#141619] p-8 text-white">
-        กำลังตรวจสอบ Session...
-      </main>
-    );
+    return <Loading />;
   }
 
-  if (status !== "authenticated") {
+  if (!session) {
     return (
-      <main className="min-h-screen bg-[#141619] p-8 text-white">
-        <div className="rounded-xl bg-[#2C2E3A] p-6">
-          กรุณาเข้าสู่ระบบ
-        </div>
+      <main className="flex min-h-screen items-center justify-center bg-[#202A30] text-[#EBF4DD]">
+        กรุณาเข้าสู่ระบบ
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#141619] text-white">
+    <main className="min-h-screen bg-[#202A30] text-[#EBF4DD]">
       <Sidebar />
 
-      <div className="ml-64 p-8">
-        <Header />
+      <div className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
+        {/* Header */}
 
-        {/* Page Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
+            Monitoring
+          </p>
+
+          <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
             Telemetry History
           </h1>
-          <button
-            onClick={handleExportCsv}
-            disabled={
-              exporting || !selectedBin
-            }
-            className="rounded-lg bg-[#0A21C0] px-5 py-3 text-sm font-medium transition hover:bg-[#050A44] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {exporting
-              ? "กำลัง Export..."
-              : "📥 Export CSV"}
-          </button>
 
-          <p className="mt-2 text-gray-400">
-            ดูข้อมูลการทำงานของถังย้อนหลัง
+          <p className="mt-2 text-sm text-[#90AB8B]">
+            ตรวจสอบข้อมูลย้อนหลังของ Smart Bin
           </p>
         </div>
 
         {/* Filter */}
-        <div className="mb-6 rounded-xl bg-[#2C2E3A] p-5">
-          <div className="grid gap-4 md:grid-cols-4">
+
+        <section
+          className="
+            mt-6
+            rounded-2xl
+            border
+            border-[#5A7863]/30
+            bg-[#3B4953]
+            p-5
+            shadow-xl
+            sm:p-6
+          "
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg">
+              🔎
+            </span>
+
+            <h2 className="font-semibold text-[#EBF4DD]">
+              Filter
+            </h2>
+          </div>
+
+          <div
+            className="
+              mt-5
+              grid
+              gap-4
+              sm:grid-cols-2
+              lg:grid-cols-4
+            "
+          >
             {/* Bin */}
+
             <div>
-              <label className="mb-2 block text-sm text-gray-400">
-                Bin
+              <label className="mb-2 block text-xs font-medium text-[#90AB8B]">
+                Device
               </label>
 
               <select
                 value={selectedBin}
-                onChange={(e) =>
-                  handleBinChange(
-                    e.target.value
+                disabled={loadingBins}
+                onChange={(event) =>
+                  setSelectedBin(
+                    event.target.value
                   )
                 }
-                disabled={
-                  binsLoading ||
-                  bins.length === 0
-                }
-                className="w-full rounded-lg bg-[#141619] p-3 text-white outline-none disabled:opacity-50"
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-[#5A7863]/40
+                  bg-[#202A30]
+                  px-4
+                  py-3
+                  text-sm
+                  text-[#EBF4DD]
+                  outline-none
+                  focus:border-[#90AB8B]
+                  focus:ring-2
+                  focus:ring-[#90AB8B]/20
+                "
               >
                 {bins.length === 0 ? (
                   <option value="">
-                    ไม่มีข้อมูลถัง
+                    No devices
                   </option>
                 ) : (
                   bins.map((bin) => (
@@ -300,339 +314,623 @@ export default function HistoryPage() {
                       key={bin.binId}
                       value={bin.binId}
                     >
-                      {bin.binId} - {bin.name}
+                      {bin.name} (
+                      {bin.binId})
                     </option>
                   ))
                 )}
               </select>
             </div>
 
-            {/* Start Date */}
-            <div>
-              <label className="mb-2 block text-sm text-gray-400">
-                วันที่เริ่มต้น
-              </label>
+            {/* Start */}
 
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) =>
-                  handleStartDateChange(
-                    e.target.value
-                  )
-                }
-                className="w-full rounded-lg bg-[#141619] p-3 text-white outline-none"
-              />
-            </div>
+            <DateInput
+              label="Start Date"
+              value={startDate}
+              onChange={(
+                value
+              ) =>
+                setStartDate(value)
+              }
+            />
 
-            {/* End Date */}
-            <div>
-              <label className="mb-2 block text-sm text-gray-400">
-                วันที่สิ้นสุด
-              </label>
+            {/* End */}
 
-              <input
-                type="date"
-                value={endDate}
-                min={startDate || undefined}
-                onChange={(e) =>
-                  handleEndDateChange(
-                    e.target.value
-                  )
-                }
-                className="w-full rounded-lg bg-[#141619] p-3 text-white outline-none"
-              />
-            </div>
+            <DateInput
+              label="End Date"
+              value={endDate}
+              onChange={(
+                value
+              ) =>
+                setEndDate(value)
+              }
+            />
 
-            {/* Reset */}
+            {/* Export */}
+
             <div className="flex items-end">
               <button
-                type="button"
-                onClick={resetFilter}
-                className="w-full rounded-lg bg-[#050A44] p-3 font-semibold transition hover:bg-[#0A21C0]"
+                onClick={
+                  handleExport
+                }
+                disabled={
+                  exporting ||
+                  !selectedBin
+                }
+                className="
+                  w-full
+                  rounded-xl
+                  bg-[#5A7863]
+                  px-4
+                  py-3
+                  text-sm
+                  font-semibold
+                  text-[#EBF4DD]
+                  transition
+                  hover:bg-[#90AB8B]
+                  hover:text-[#202A30]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                "
               >
-                Reset Filter
+                {exporting
+                  ? "Exporting..."
+                  : "↓ Export CSV"}
               </button>
             </div>
           </div>
 
-          {binsError && (
-            <div className="mt-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
-              {binsError}
-            </div>
-          )}
-        </div>
+          {/* Reset */}
 
-        {/* History Table */}
-        {selectedBin ? (
-          <HistoryTable
-            binId={selectedBin}
-            page={page}
-            setPage={setPage}
-            startDate={startDate}
-            endDate={endDate}
-          />
-        ) : (
-          <div className="rounded-xl bg-[#2C2E3A] p-8 text-center text-gray-400">
-            ไม่พบ Bin สำหรับแสดงข้อมูล
+          {(startDate ||
+            endDate) && (
+            <button
+              onClick={() => {
+                setStartDate("");
+                setEndDate("");
+                setPage(1);
+              }}
+              className="
+                mt-4
+                text-xs
+                text-[#90AB8B]
+                underline
+                underline-offset-4
+                hover:text-[#EBF4DD]
+              "
+            >
+              Reset date filter
+            </button>
+          )}
+        </section>
+
+        {/* Table */}
+
+        <section
+          className="
+            mt-6
+            overflow-hidden
+            rounded-2xl
+            border
+            border-[#5A7863]/30
+            bg-[#3B4953]
+            shadow-xl
+          "
+        >
+          {/* Table Header */}
+
+          <div className="border-b border-[#5A7863]/30 p-5 sm:p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-[#90AB8B]">
+                  Data Records
+                </p>
+
+                <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">
+                  Telemetry
+                </h2>
+              </div>
+
+              {pagination && (
+                <span className="text-xs text-[#90AB8B]">
+                  {pagination.total} records
+                </span>
+              )}
+            </div>
           </div>
-        )}
+
+          {loading ? (
+            <HistoryLoading />
+          ) : error ? (
+            <div className="p-8 text-center text-sm text-red-300">
+              {error}
+            </div>
+          ) : data.length === 0 ? (
+            <EmptyHistory />
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left">
+                  <thead>
+                    <tr className="border-b border-[#5A7863]/30 bg-[#202A30]/50">
+                      <TableHead>
+                        Time
+                      </TableHead>
+
+                      <TableHead>
+                        Level
+                      </TableHead>
+
+                      <TableHead>
+                        Capacitive
+                      </TableHead>
+
+                      <TableHead>
+                        Inductive
+                      </TableHead>
+
+                      <TableHead>
+                        Level Sensor
+                      </TableHead>
+
+                      <TableHead>
+                        Voltage
+                      </TableHead>
+
+                      <TableHead>
+                        Battery
+                      </TableHead>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {data.map(
+                      (item) => (
+                        <tr
+                          key={
+                            item._id
+                          }
+                          className="
+                            border-b
+                            border-[#5A7863]/20
+                            transition
+                            hover:bg-[#5A7863]/10
+                          "
+                        >
+                          <td className="whitespace-nowrap px-5 py-4 text-sm text-[#EBF4DD]">
+                            {formatDate(
+                              item.timestamp
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <LevelCell
+                              value={
+                                item.level
+                              }
+                            />
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <StatusBadge
+                              status={
+                                item
+                                  .sensorStatus
+                                  .capacitive
+                              }
+                            />
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <StatusBadge
+                              status={
+                                item
+                                  .sensorStatus
+                                  .inductive
+                              }
+                            />
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <StatusBadge
+                              status={
+                                item
+                                  .sensorStatus
+                                  .level
+                              }
+                            />
+                          </td>
+
+                          <td className="px-5 py-4 text-sm font-semibold text-[#EBF4DD]">
+                            {item.voltage.toFixed(
+                              1
+                            )}
+                            <span className="ml-1 text-[#90AB8B]">
+                              V
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4 text-sm font-semibold text-[#EBF4DD]">
+                            {item.batteryPct}
+                            <span className="ml-1 text-[#90AB8B]">
+                              %
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile hint */}
+
+              <div className="border-t border-[#5A7863]/20 px-5 py-3 text-center text-xs text-[#90AB8B] sm:hidden">
+                ← เลื่อนตารางซ้าย-ขวาเพื่อดูข้อมูล →
+              </div>
+
+              {/* Pagination */}
+
+              <Pagination
+                page={
+                  pagination?.page ||
+                  1
+                }
+                totalPages={
+                  pagination?.totalPages ||
+                  1
+                }
+                hasPrevious={
+                  pagination?.hasPreviousPage ||
+                  false
+                }
+                hasNext={
+                  pagination?.hasNextPage ||
+                  false
+                }
+                onPrevious={() =>
+                  setPage(
+                    (current) =>
+                      Math.max(
+                        current - 1,
+                        1
+                      )
+                  )
+                }
+                onNext={() =>
+                  setPage(
+                    (current) =>
+                      current + 1
+                  )
+                }
+              />
+            </>
+          )}
+        </section>
       </div>
     </main>
   );
 }
 
-function HistoryTable({
-  binId,
-  page,
-  setPage,
-  startDate,
-  endDate,
+/* ==================================================
+   Date Input
+================================================== */
+
+function DateInput({
+  label,
+  value,
+  onChange,
 }: {
-  binId: string;
-  page: number;
-  setPage: React.Dispatch<
-    React.SetStateAction<number>
-  >;
-  startDate: string;
-  endDate: string;
+  label: string;
+  value: string;
+  onChange: (
+    value: string
+  ) => void;
 }) {
-  const {
-    data,
-    pagination,
-    loading,
-    error,
-  } = useTelemetryHistory(
-    binId,
-    10,
-    page,
-    startDate,
-    endDate
-  );
-
   return (
-    <div className="overflow-hidden rounded-xl bg-[#2C2E3A]">
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[950px]">
-          <thead className="bg-[#050A44]">
-            <tr>
-              <th className="px-4 py-4 text-left">
-                Time
-              </th>
+    <div>
+      <label className="mb-2 block text-xs font-medium text-[#90AB8B]">
+        {label}
+      </label>
 
-              <th className="px-4 py-4 text-left">
-                Level
-              </th>
-
-              <th className="px-4 py-4 text-left">
-                Capacitive
-              </th>
-
-              <th className="px-4 py-4 text-left">
-                Inductive
-              </th>
-
-              <th className="px-4 py-4 text-left">
-                Level Sensor
-              </th>
-
-              <th className="px-4 py-4 text-left">
-                Voltage
-              </th>
-
-              <th className="px-4 py-4 text-left">
-                Battery
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-10 text-center text-gray-400"
-                >
-                  กำลังโหลดข้อมูล...
-                </td>
-              </tr>
-            ) : error ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-10 text-center text-red-400"
-                >
-                  {error}
-                </td>
-              </tr>
-            ) : data.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-10 text-center text-gray-400"
-                >
-                  ไม่พบข้อมูล Telemetry
-                </td>
-              </tr>
-            ) : (
-              data.map((item) => (
-                <tr
-                  key={item._id}
-                  className="border-t border-white/5 hover:bg-white/5"
-                >
-                  <td className="whitespace-nowrap px-4 py-4 text-sm">
-                    {new Date(
-                      item.timestamp
-                    ).toLocaleString(
-                      "th-TH"
-                    )}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <LevelBadge
-                      level={item.level}
-                    />
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <StatusBadge
-                      status={
-                        item.sensorStatus
-                          .capacitive
-                      }
-                    />
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <StatusBadge
-                      status={
-                        item.sensorStatus
-                          .inductive
-                      }
-                    />
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <StatusBadge
-                      status={
-                        item.sensorStatus
-                          .level
-                      }
-                    />
-                  </td>
-
-                  <td className="px-4 py-4">
-                    {item.voltage.toFixed(1)} V
-                  </td>
-
-                  <td className="px-4 py-4">
-                    {item.batteryPct}%
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      {pagination && (
-        <div className="flex flex-col gap-4 border-t border-white/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-gray-400">
-            หน้า {pagination.page} /{" "}
-            {Math.max(
-              pagination.totalPages,
-              1
-            )}{" "}
-            • ทั้งหมด {pagination.total} รายการ
-          </p>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={
-                !pagination.hasPreviousPage
-              }
-              onClick={() =>
-                setPage((current) =>
-                  Math.max(
-                    current - 1,
-                    1
-                  )
-                )
-              }
-              className="rounded-lg bg-[#141619] px-4 py-2 text-sm transition hover:bg-[#050A44] disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              ← ก่อนหน้า
-            </button>
-
-            <button
-              type="button"
-              disabled={
-                !pagination.hasNextPage
-              }
-              onClick={() =>
-                setPage(
-                  (current) =>
-                    current + 1
-                )
-              }
-              className="rounded-lg bg-[#141619] px-4 py-2 text-sm transition hover:bg-[#050A44] disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              ถัดไป →
-            </button>
-          </div>
-        </div>
-      )}
+      <input
+        type="date"
+        value={value}
+        onChange={(event) =>
+          onChange(
+            event.target.value
+          )
+        }
+        className="
+          w-full
+          rounded-xl
+          border
+          border-[#5A7863]/40
+          bg-[#202A30]
+          px-4
+          py-3
+          text-sm
+          text-[#EBF4DD]
+          outline-none
+          [color-scheme:dark]
+          focus:border-[#90AB8B]
+          focus:ring-2
+          focus:ring-[#90AB8B]/20
+        "
+      />
     </div>
   );
 }
+
+/* ==================================================
+   Table Head
+================================================== */
+
+function TableHead({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <th className="whitespace-nowrap px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[#90AB8B]">
+      {children}
+    </th>
+  );
+}
+
+/* ==================================================
+   Level
+================================================== */
+
+function LevelCell({
+  value,
+}: {
+  value: number;
+}) {
+  return (
+    <div className="flex min-w-[110px] items-center gap-3">
+      <span className="w-10 font-semibold text-[#EBF4DD]">
+        {value}%
+      </span>
+
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[#202A30]">
+        <div
+          className={
+            value >= 90
+              ? "h-full rounded-full bg-red-400"
+              : value >= 75
+                ? "h-full rounded-full bg-yellow-300"
+                : "h-full rounded-full bg-[#90AB8B]"
+          }
+          style={{
+            width: `${Math.min(
+              Math.max(value, 0),
+              100
+            )}%`,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================
+   Status
+================================================== */
 
 function StatusBadge({
   status,
 }: {
   status: string;
 }) {
-  const className =
-    status === "ok"
-      ? "bg-green-500/10 text-green-400"
-      : status === "warning"
-        ? "bg-yellow-500/10 text-yellow-400"
-        : status === "offline"
-          ? "bg-gray-500/10 text-gray-400"
-          : "bg-red-500/10 text-red-400";
+  const ok = status === "ok";
+  const warning =
+    status === "warning";
+  const offline =
+    status === "offline";
 
   return (
     <span
-      className={`rounded-full px-3 py-1 text-xs font-semibold ${className}`}
+      className={`
+        inline-flex
+        items-center
+        gap-1.5
+        rounded-full
+        px-2.5
+        py-1
+        text-xs
+        font-medium
+        ${
+          ok
+            ? "bg-[#90AB8B]/10 text-[#90AB8B]"
+            : warning
+              ? "bg-yellow-300/10 text-yellow-300"
+              : offline
+                ? "bg-gray-300/10 text-gray-300"
+                : "bg-red-400/10 text-red-300"
+        }
+      `}
     >
-      {status.toUpperCase()}
+      <span
+        className={`
+          h-1.5
+          w-1.5
+          rounded-full
+          ${
+            ok
+              ? "bg-[#90AB8B]"
+              : warning
+                ? "bg-yellow-300"
+                : offline
+                  ? "bg-gray-300"
+                  : "bg-red-300"
+          }
+        `}
+      />
+
+      {status}
     </span>
   );
 }
 
-function LevelBadge({
-  level,
-}: {
-  level: number;
-}) {
-  let className =
-    "bg-green-500/10 text-green-400";
+/* ==================================================
+   Pagination
+================================================== */
 
-  if (level >= 85) {
-    className =
-      "bg-red-500/10 text-red-400";
-  } else if (level >= 70) {
-    className =
-      "bg-yellow-500/10 text-yellow-400";
+function Pagination({
+  page,
+  totalPages,
+  hasPrevious,
+  hasNext,
+  onPrevious,
+  onNext,
+}: {
+  page: number;
+  totalPages: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between border-t border-[#5A7863]/20 p-4 sm:p-5">
+      <button
+        onClick={onPrevious}
+        disabled={!hasPrevious}
+        className="
+          rounded-xl
+          border
+          border-[#5A7863]/40
+          bg-[#202A30]
+          px-4
+          py-2
+          text-sm
+          text-[#EBF4DD]
+          transition
+          hover:bg-[#5A7863]
+          disabled:cursor-not-allowed
+          disabled:opacity-30
+        "
+      >
+        ← Previous
+      </button>
+
+      <span className="text-xs text-[#90AB8B] sm:text-sm">
+        Page {page} /{" "}
+        {totalPages}
+      </span>
+
+      <button
+        onClick={onNext}
+        disabled={!hasNext}
+        className="
+          rounded-xl
+          border
+          border-[#5A7863]/40
+          bg-[#202A30]
+          px-4
+          py-2
+          text-sm
+          text-[#EBF4DD]
+          transition
+          hover:bg-[#5A7863]
+          disabled:cursor-not-allowed
+          disabled:opacity-30
+        "
+      >
+        Next →
+      </button>
+    </div>
+  );
+}
+
+/* ==================================================
+   Empty
+================================================== */
+
+function EmptyHistory() {
+  return (
+    <div className="p-12 text-center">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#5A7863] text-2xl">
+        📜
+      </div>
+
+      <h3 className="mt-5 font-semibold text-[#EBF4DD]">
+        No telemetry data
+      </h3>
+
+      <p className="mt-2 text-sm text-[#90AB8B]">
+        ยังไม่มีข้อมูล Telemetry สำหรับช่วงเวลาที่เลือก
+      </p>
+    </div>
+  );
+}
+
+/* ==================================================
+   Loading
+================================================== */
+
+function HistoryLoading() {
+  return (
+    <div className="space-y-3 p-5">
+      {[1, 2, 3, 4, 5].map(
+        (item) => (
+          <div
+            key={item}
+            className="
+              h-12
+              animate-pulse
+              rounded-lg
+              bg-[#202A30]
+            "
+          />
+        )
+      )}
+    </div>
+  );
+}
+
+/* ==================================================
+   Date Format
+================================================== */
+
+function formatDate(
+  value: string
+) {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "--";
   }
 
+  return date.toLocaleString(
+    "th-TH",
+    {
+      dateStyle: "short",
+      timeStyle: "medium",
+    }
+  );
+}
+
+/* ==================================================
+   Loading
+================================================== */
+
+function Loading() {
   return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-semibold ${className}`}
-    >
-      {level}%
-    </span>
+    <main className="flex min-h-screen items-center justify-center bg-[#202A30]">
+      <div className="text-center text-[#90AB8B]">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#5A7863] border-t-[#EBF4DD]" />
+
+        <p className="mt-4 text-sm">
+          Loading...
+        </p>
+      </div>
+    </main>
   );
 }

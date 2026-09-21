@@ -1,13 +1,20 @@
 "use client";
 
 import {
-  Chart as ChartJS,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Chart,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
   Tooltip,
   Legend,
+  Filler,
 } from "chart.js";
 
 import { Line } from "react-chartjs-2";
@@ -17,15 +24,14 @@ import {
   StatsRange,
 } from "@/hooks/useDashboardStats";
 
-import { useState } from "react";
-
-ChartJS.register(
+Chart.register(
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 export default function WasteChart() {
@@ -38,184 +44,301 @@ export default function WasteChart() {
     error,
   } = useDashboardStats(range);
 
-  const labels =
-    data?.chart.map(
-      (item) => item.label
-    ) || [];
-
-  const values =
-    data?.chart.map(
-      (item) => item.level
-    ) || [];
+  const chartRef = useRef<Chart<"line"> | null>(null);
 
   const chartData = {
-    labels,
+    labels:
+      data?.chart.map((item) => item.label) || [],
 
     datasets: [
       {
         label: "Waste Level (%)",
-        data: values,
+
+        data:
+          data?.chart.map(
+            (item) => item.level
+          ) || [],
+
+        borderColor: "#90AB8B",
+
+        backgroundColor:
+          "rgba(144, 171, 139, 0.12)",
 
         borderWidth: 2,
 
-        tension: 0.3,
-
-        fill: false,
-
         pointRadius: 3,
+
+        pointHoverRadius: 5,
+
+        pointBackgroundColor: "#EBF4DD",
+
+        pointBorderColor: "#5A7863",
+
+        fill: true,
+
+        tension: 0.35,
       },
     ],
   };
 
-  const options = {
+  const chartOptions = {
     responsive: true,
 
     maintainAspectRatio: false,
 
-    scales: {
-      y: {
-        min: 0,
-        max: 100,
+    plugins: {
+      legend: {
+        display: false,
+      },
 
-        ticks: {
-          callback: (
-            value: string | number
-          ) => `${value}%`,
+      tooltip: {
+        backgroundColor: "#202A30",
+
+        borderColor: "#5A7863",
+
+        borderWidth: 1,
+
+        titleColor: "#EBF4DD",
+
+        bodyColor: "#90AB8B",
+
+        padding: 12,
+
+        displayColors: false,
+
+        callbacks: {
+          label: (context: any) =>
+            `Waste Level: ${context.parsed.y}%`,
         },
       },
     },
 
-    plugins: {
-      legend: {
-        display: true,
+    scales: {
+      x: {
+        grid: {
+          color:
+            "rgba(144, 171, 139, 0.08)",
+        },
+
+        ticks: {
+          color: "#90AB8B",
+
+          maxRotation: 0,
+
+          autoSkip: true,
+
+          maxTicksLimit: 8,
+        },
+      },
+
+      y: {
+        beginAtZero: true,
+
+        max: 100,
+
+        grid: {
+          color:
+            "rgba(144, 171, 139, 0.08)",
+        },
+
+        ticks: {
+          color: "#90AB8B",
+
+          callback: (value: any) =>
+            `${value}%`,
+        },
       },
     },
   };
 
   return (
-    <div className="rounded-xl bg-[#2C2E3A] p-6">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <section
+      className="
+        rounded-2xl
+        border
+        border-[#5A7863]/30
+        bg-[#3B4953]
+        p-5
+        shadow-xl
+        sm:p-6
+      "
+    >
+      {/* Header */}
+
+      <div
+        className="
+          flex
+          flex-col
+          gap-4
+          sm:flex-row
+          sm:items-center
+          sm:justify-between
+        "
+      >
         <div>
-          <h2 className="text-xl font-bold">
-            Waste Level Statistics
+          <p
+            className="
+              text-xs
+              font-medium
+              uppercase
+              tracking-wider
+              text-[#90AB8B]
+            "
+          >
+            Analytics
+          </p>
+
+          <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">
+            Waste Level
           </h2>
 
-          <p className="mt-1 text-sm text-gray-400">
-            ข้อมูลระดับขยะจาก MongoDB
+          <p className="mt-1 text-sm text-[#90AB8B]">
+            Average waste level over time
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <RangeButton
-            active={range === "day"}
-            onClick={() =>
-              setRange("day")
-            }
-          >
-            Day
-          </RangeButton>
+        {/* Range */}
 
-          <RangeButton
-            active={range === "week"}
-            onClick={() =>
-              setRange("week")
-            }
-          >
-            Week
-          </RangeButton>
-
-          <RangeButton
-            active={range === "month"}
-            onClick={() =>
-              setRange("month")
-            }
-          >
-            Month
-          </RangeButton>
+        <div
+          className="
+            flex
+            w-full
+            rounded-xl
+            border
+            border-[#5A7863]/40
+            bg-[#202A30]
+            p-1
+            sm:w-auto
+          "
+        >
+          {(
+            [
+              ["day", "Day"],
+              ["week", "Week"],
+              ["month", "Month"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() =>
+                setRange(value)
+              }
+              className={`
+                flex-1
+                rounded-lg
+                px-3
+                py-2
+                text-xs
+                font-medium
+                transition
+                sm:flex-none
+                sm:px-4
+                ${
+                  range === value
+                    ? "bg-[#5A7863] text-[#EBF4DD] shadow"
+                    : "text-[#90AB8B] hover:bg-[#3B4953] hover:text-[#EBF4DD]"
+                }
+              `}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex h-80 items-center justify-center text-gray-400">
-          กำลังโหลดข้อมูล...
+      {/* Summary */}
+
+      {data && (
+        <div
+          className="
+            mt-5
+            grid
+            grid-cols-2
+            gap-3
+            lg:grid-cols-4
+          "
+        >
+          <StatCard
+            label="Records"
+            value={data.summary.totalRecords}
+          />
+
+          <StatCard
+            label="Average Level"
+            value={`${data.summary.averageLevel}%`}
+          />
+
+          <StatCard
+            label="Average Battery"
+            value={`${data.summary.averageBattery}%`}
+          />
+
+          <StatCard
+            label="Max Level"
+            value={`${data.summary.maxLevel}%`}
+          />
         </div>
-      ) : error ? (
-        <div className="flex h-80 items-center justify-center text-red-400">
-          {error}
-        </div>
-      ) : !data ? (
-        <div className="flex h-80 items-center justify-center text-gray-400">
-          ไม่มีข้อมูล
-        </div>
-      ) : (
-        <>
-          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard
-              label="Average Level"
-              value={`${data.summary.averageLevel}%`}
-            />
-
-            <StatCard
-              label="Max Level"
-              value={`${data.summary.maxLevel}%`}
-            />
-
-            <StatCard
-              label="Battery"
-              value={`${data.summary.averageBattery}%`}
-            />
-
-            <StatCard
-              label="Voltage"
-              value={`${data.summary.averageVoltage} V`}
-            />
-          </div>
-
-          <div className="h-80">
-            {data.chart.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-gray-400">
-                ยังไม่มีข้อมูล Telemetry
-              </div>
-            ) : (
-              <Line
-                data={chartData}
-                options={options}
-              />
-            )}
-          </div>
-
-          <div className="mt-4 text-sm text-gray-400">
-            Telemetry Records:{" "}
-            <span className="font-semibold text-white">
-              {data.summary.totalRecords}
-            </span>
-          </div>
-        </>
       )}
-    </div>
-  );
-}
 
-function RangeButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-lg px-4 py-2 text-sm transition ${
-        active
-          ? "bg-[#0A21C0] text-white"
-          : "bg-[#141619] text-gray-400 hover:text-white"
-      }`}
-    >
-      {children}
-    </button>
+      {/* Chart */}
+
+      <div className="mt-6">
+        {loading ? (
+          <div
+            className="
+              flex
+              h-[300px]
+              items-center
+              justify-center
+              rounded-xl
+              bg-[#202A30]
+              text-sm
+              text-[#90AB8B]
+            "
+          >
+            Loading chart...
+          </div>
+        ) : error ? (
+          <div
+            className="
+              flex
+              h-[300px]
+              items-center
+              justify-center
+              rounded-xl
+              bg-red-400/5
+              text-sm
+              text-red-300
+            "
+          >
+            {error}
+          </div>
+        ) : !data?.chart.length ? (
+          <div
+            className="
+              flex
+              h-[300px]
+              items-center
+              justify-center
+              rounded-xl
+              bg-[#202A30]
+              text-sm
+              text-[#90AB8B]
+            "
+          >
+            No telemetry data
+          </div>
+        ) : (
+          <div className="h-[300px] w-full sm:h-[350px]">
+            <Line
+              ref={chartRef}
+              data={chartData}
+              options={chartOptions}
+            />
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -224,15 +347,24 @@ function StatCard({
   value,
 }: {
   label: string;
-  value: string;
+  value: string | number;
 }) {
   return (
-    <div className="rounded-lg bg-[#141619] p-4">
-      <p className="text-xs text-gray-500">
+    <div
+      className="
+        rounded-xl
+        border
+        border-[#5A7863]/25
+        bg-[#202A30]
+        p-3
+        sm:p-4
+      "
+    >
+      <p className="text-xs text-[#90AB8B]">
         {label}
       </p>
 
-      <p className="mt-2 text-lg font-bold">
+      <p className="mt-1 text-lg font-bold text-[#EBF4DD] sm:text-xl">
         {value}
       </p>
     </div>
