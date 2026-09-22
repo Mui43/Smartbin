@@ -1,14 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #051f20;
-  --sidebar: #0b2b26;
-  --card: #163831;
-  --card-hover: #235347;
-  --sage: #8eb69b;
-  --light-sage: #daf1de;
-  --text: #daf1de;
-  --text-muted: #8eb69b;
+  /* Default: Dark Theme */
+  --bg: #202a30;
+  --card: #3b4953;
+  --accent: #5a7863;
+  --secondary: #90ab8b;
+  --text: #ebf4dd;
+}
+
+/* Light Mode Overrides */
+html:not(.dark) {
+  --bg: #f4f7f5;
+  --card: #ffffff;
+  --accent: #5a7863;
+  --secondary: #6e8875;
+  --text: #1d252a;
 }
 
 * {
@@ -26,42 +33,10 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
-
-/* =========================
-   Scrollbar
-========================= */
-
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #0b2b26;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #235347;
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #8eb69b;
-}
-
-/* =========================
-   Selection
-========================= */
-
-::selection {
-  background: #8eb69b;
-  color: #051f20;
-}
-
-/* =========================
-   Form
-========================= */
 
 button,
 input,
@@ -72,4 +47,28 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--text);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary);
 }

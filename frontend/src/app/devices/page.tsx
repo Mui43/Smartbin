@@ -2,9 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import Swal from "sweetalert2";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  MapPin,
+  Radio,
+  Gauge,
+  BarChart2,
+  Battery,
+  Zap,
+} from "lucide-react";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+
+// สไตล์การแจ้งเตือน SweetAlert2 สำหรับ Dark Theme
+const darkSwal = Swal.mixin({
+  background: "#2C2E3A",
+  color: "#FFFFFF",
+  confirmButtonColor: "#0A21C0",
+  cancelButtonColor: "#4B5563",
+});
 
 interface Bin {
   _id?: string;
@@ -46,16 +67,13 @@ export default function DevicesPage() {
   const [error, setError] = useState("");
 
   const [showModal, setShowModal] = useState(false);
-  const [editingBin, setEditingBin] =
-    useState<Bin | null>(null);
+  const [editingBin, setEditingBin] = useState<Bin | null>(null);
 
-  const [form, setForm] =
-    useState<BinForm>(emptyForm);
+  const [form, setForm] = useState<BinForm>(emptyForm);
 
   const [saving, setSaving] = useState(false);
 
-  const isAdmin =
-    session?.user?.role === "admin";
+  const isAdmin = session?.user?.role === "admin";
 
   async function loadBins() {
     if (!session?.user?.accessToken) {
@@ -66,23 +84,19 @@ export default function DevicesPage() {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        `${API_URL}/api/bins`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${session.user.accessToken}`,
-          },
-          cache: "no-store",
-        }
-      );
+      const response = await fetch(`${API_URL}/api/bins`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.user.accessToken}`,
+        },
+        cache: "no-store",
+      });
 
       const result = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          result?.error?.message ||
-            "ไม่สามารถโหลดข้อมูล Bin ได้"
+          result?.error?.message || "ไม่สามารถโหลดข้อมูล Bin ได้",
         );
       }
 
@@ -93,9 +107,7 @@ export default function DevicesPage() {
       console.error(error);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "ไม่สามารถโหลดข้อมูล Bin ได้"
+        error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูล Bin ได้",
       );
     } finally {
       setLoading(false);
@@ -142,28 +154,31 @@ export default function DevicesPage() {
     });
   }
 
-  function handleChange(
-    field: keyof BinForm,
-    value: string | number
-  ) {
+  function handleChange(field: keyof BinForm, value: string | number) {
     setForm((prev) => ({
       ...prev,
       [field]: value,
     }));
   }
 
-  async function handleSubmit(
-    event: React.FormEvent
-  ) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     if (!session?.user?.accessToken) {
-      alert("กรุณาเข้าสู่ระบบ");
+      darkSwal.fire({
+        icon: "warning",
+        title: "แจ้งเตือน",
+        text: "กรุณาเข้าสู่ระบบ",
+      });
       return;
     }
 
     if (!isAdmin) {
-      alert("คุณไม่มีสิทธิ์จัดการ Bin");
+      darkSwal.fire({
+        icon: "error",
+        title: "ไม่มีสิทธิ์ access",
+        text: "คุณไม่มีสิทธิ์จัดการ Bin",
+      });
       return;
     }
 
@@ -173,15 +188,20 @@ export default function DevicesPage() {
       !form.location.trim() ||
       !form.mqttTopic.trim()
     ) {
-      alert("กรุณากรอกข้อมูลให้ครบ");
+      darkSwal.fire({
+        icon: "warning",
+        title: "ข้อมูลไม่ครบถ้วน",
+        text: "กรุณากรอกข้อมูลให้ครบทุกช่อง",
+      });
       return;
     }
 
-    if (
-      form.thresholdPct < 0 ||
-      form.thresholdPct > 100
-    ) {
-      alert("Threshold ต้องอยู่ระหว่าง 0 - 100");
+    if (form.thresholdPct < 0 || form.thresholdPct > 100) {
+      darkSwal.fire({
+        icon: "warning",
+        title: "ข้อมูลไม่ถูกต้อง",
+        text: "Threshold ต้องอยู่ระหว่าง 0 - 100",
+      });
       return;
     }
 
@@ -194,9 +214,7 @@ export default function DevicesPage() {
         ? `${API_URL}/api/bins/${editingBin.binId}`
         : `${API_URL}/api/bins`;
 
-      const method = isEditing
-        ? "PUT"
-        : "POST";
+      const method = isEditing ? "PUT" : "POST";
 
       const response = await fetch(url, {
         method,
@@ -209,38 +227,35 @@ export default function DevicesPage() {
           name: form.name.trim(),
           location: form.location.trim(),
           mqttTopic: form.mqttTopic.trim(),
-          thresholdPct: Number(
-            form.thresholdPct
-          ),
+          thresholdPct: Number(form.thresholdPct),
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          result?.error?.message ||
-            "ไม่สามารถบันทึกข้อมูลได้"
-        );
+        throw new Error(result?.error?.message || "ไม่สามารถบันทึกข้อมูลได้");
       }
 
-      alert(
-        isEditing
-          ? "แก้ไข Bin สำเร็จ"
-          : "เพิ่ม Bin สำเร็จ"
-      );
-
       closeModal();
+
+      await darkSwal.fire({
+        icon: "success",
+        title: "สำเร็จ!",
+        text: isEditing ? "แก้ไข Bin สำเร็จ" : "เพิ่ม Bin สำเร็จ",
+        timer: 1500,
+        showConfirmButton: false,
+      });
 
       await loadBins();
     } catch (error) {
       console.error(error);
 
-      alert(
-        error instanceof Error
-          ? error.message
-          : "เกิดข้อผิดพลาด"
-      );
+      darkSwal.fire({
+        icon: "error",
+        title: "เกิดข้อผิดพลาด",
+        text: error instanceof Error ? error.message : "เกิดข้อผิดพลาด",
+      });
     } finally {
       setSaving(false);
     }
@@ -248,52 +263,68 @@ export default function DevicesPage() {
 
   async function handleDelete(bin: Bin) {
     if (!session?.user?.accessToken) {
-      alert("กรุณาเข้าสู่ระบบ");
+      darkSwal.fire({
+        icon: "warning",
+        title: "แจ้งเตือน",
+        text: "กรุณาเข้าสู่ระบบ",
+      });
       return;
     }
 
     if (!isAdmin) {
-      alert("คุณไม่มีสิทธิ์ลบ Bin");
+      darkSwal.fire({
+        icon: "error",
+        title: "ไม่มีสิทธิ์ access",
+        text: "คุณไม่มีสิทธิ์ลบ Bin",
+      });
       return;
     }
 
-    const confirmed = window.confirm(
-      `ต้องการลบ Bin "${bin.name}" (${bin.binId}) หรือไม่?`
-    );
+    const confirmResult = await darkSwal.fire({
+      title: "ยืนยันการลบ?",
+      text: `ต้องการลบ Bin "${bin.name}" (${bin.binId}) หรือไม่?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#EF4444",
+      cancelButtonColor: "#4B5563",
+      confirmButtonText: "ลบข้อมูล",
+      cancelButtonText: "ยกเลิก",
+    });
 
-    if (!confirmed) return;
+    if (!confirmResult.isConfirmed) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/bins/${bin.binId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${session.user.accessToken}`,
-          },
-        }
-      );
+      const response = await fetch(`${API_URL}/api/bins/${bin.binId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.user.accessToken}`,
+        },
+      });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          result?.error?.message ||
-            "ไม่สามารถลบ Bin ได้"
-        );
+        throw new Error(result?.error?.message || "ไม่สามารถลบ Bin ได้");
       }
 
-      alert("ลบ Bin สำเร็จ");
+      await darkSwal.fire({
+        icon: "success",
+        title: "ลบสำเร็จ!",
+        text: "ลบ Bin เรียบร้อยแล้ว",
+        timer: 1500,
+        showConfirmButton: false,
+      });
 
       await loadBins();
     } catch (error) {
       console.error(error);
 
-      alert(
-        error instanceof Error
-          ? error.message
-          : "เกิดข้อผิดพลาดในการลบ Bin"
-      );
+      darkSwal.fire({
+        icon: "error",
+        title: "เกิดข้อผิดพลาด",
+        text:
+          error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการลบ Bin",
+      });
     }
   }
 
@@ -305,7 +336,7 @@ export default function DevicesPage() {
         <div className="ml-64 p-8">
           <Header />
 
-          <div className="rounded-xl bg-[#2C2E3A] p-6">
+          <div className="rounded-xl bg-[#2C2E3A] p-6 text-gray-400">
             กำลังตรวจสอบสิทธิ์...
           </div>
         </div>
@@ -321,9 +352,7 @@ export default function DevicesPage() {
         <div className="ml-64 p-8">
           <Header />
 
-          <div className="rounded-xl bg-[#2C2E3A] p-6">
-            กรุณาเข้าสู่ระบบ
-          </div>
+          <div className="rounded-xl bg-[#2C2E3A] p-6 text-gray-400">กรุณาเข้าสู่ระบบ</div>
         </div>
       </main>
     );
@@ -339,9 +368,7 @@ export default function DevicesPage() {
         {/* Page Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">
-              Devices Management
-            </h2>
+            <h2 className="text-2xl font-bold">Devices Management</h2>
 
             <p className="mt-1 text-sm text-gray-400">
               จัดการข้อมูลถังขยะอัจฉริยะ
@@ -351,9 +378,10 @@ export default function DevicesPage() {
           {isAdmin && (
             <button
               onClick={openAddModal}
-              className="rounded-lg bg-[#0A21C0] px-5 py-3 font-medium transition hover:bg-[#050A44]"
+              className="flex items-center gap-2 rounded-lg bg-[#0A21C0] px-5 py-3 font-medium transition hover:bg-[#050A44]"
             >
-              + เพิ่ม Bin
+              <Plus className="h-5 w-5" />
+              เพิ่ม Bin
             </button>
           )}
         </div>
@@ -361,12 +389,8 @@ export default function DevicesPage() {
         {/* Permission Info */}
         {!isAdmin && (
           <div className="mb-6 rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-4 text-sm text-yellow-300">
-            Role ของคุณคือ{" "}
-            <strong>
-              {session.user.role}
-            </strong>{" "}
-            สามารถดูข้อมูล Bin ได้ แต่ไม่มีสิทธิ์
-            เพิ่ม แก้ไข หรือลบ Bin
+            Role ของคุณคือ <strong>{session.user.role}</strong> สามารถดูข้อมูล
+            Bin ได้ แต่ไม่มีสิทธิ์ เพิ่ม แก้ไข หรือลบ Bin
           </div>
         )}
 
@@ -377,23 +401,20 @@ export default function DevicesPage() {
           </div>
         )}
 
-        {/* Loading */}
+        {/* Loading / Bins Grid */}
         {loading ? (
-          <div className="rounded-xl bg-[#2C2E3A] p-8 text-center text-gray-400">
-            กำลังโหลดข้อมูล Devices...
-          </div>
+          <DevicesSkeleton />
         ) : bins.length === 0 ? (
           <div className="rounded-xl bg-[#2C2E3A] p-8 text-center">
-            <p className="text-gray-400">
-              ยังไม่มี Bin ในระบบ
-            </p>
+            <p className="text-gray-400">ยังไม่มี Bin ในระบบ</p>
 
             {isAdmin && (
               <button
                 onClick={openAddModal}
-                className="mt-4 rounded-lg bg-[#0A21C0] px-5 py-2"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#0A21C0] px-5 py-2"
               >
-                + เพิ่ม Bin แรก
+                <Plus className="h-4 w-4" />
+                เพิ่ม Bin แรก
               </button>
             )}
           </div>
@@ -404,12 +425,8 @@ export default function DevicesPage() {
                 key={bin.binId}
                 bin={bin}
                 isAdmin={isAdmin}
-                onEdit={() =>
-                  openEditModal(bin)
-                }
-                onDelete={() =>
-                  handleDelete(bin)
-                }
+                onEdit={() => openEditModal(bin)}
+                onDelete={() => handleDelete(bin)}
               />
             ))}
           </div>
@@ -422,9 +439,7 @@ export default function DevicesPage() {
               <div className="mb-6 flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-bold">
-                    {editingBin
-                      ? "แก้ไข Bin"
-                      : "เพิ่ม Bin"}
+                    {editingBin ? "แก้ไข Bin" : "เพิ่ม Bin"}
                   </h3>
 
                   <p className="mt-1 text-sm text-gray-400">
@@ -434,16 +449,13 @@ export default function DevicesPage() {
 
                 <button
                   onClick={closeModal}
-                  className="text-2xl text-gray-400 hover:text-white"
+                  className="text-gray-400 hover:text-white"
                 >
-                  ×
+                  <X className="h-6 w-6" />
                 </button>
               </div>
 
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-4"
-              >
+              <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Bin ID */}
                 <div>
                   <label className="mb-2 block text-sm text-gray-300">
@@ -453,12 +465,7 @@ export default function DevicesPage() {
                   <input
                     type="text"
                     value={form.binId}
-                    onChange={(e) =>
-                      handleChange(
-                        "binId",
-                        e.target.value
-                      )
-                    }
+                    onChange={(e) => handleChange("binId", e.target.value)}
                     disabled={!!editingBin}
                     placeholder="A-001"
                     className="w-full rounded-lg border border-white/10 bg-[#141619] px-4 py-3 outline-none focus:border-[#0A21C0] disabled:cursor-not-allowed disabled:opacity-50"
@@ -480,12 +487,7 @@ export default function DevicesPage() {
                   <input
                     type="text"
                     value={form.name}
-                    onChange={(e) =>
-                      handleChange(
-                        "name",
-                        e.target.value
-                      )
-                    }
+                    onChange={(e) => handleChange("name", e.target.value)}
                     placeholder="Bin A-001"
                     className="w-full rounded-lg border border-white/10 bg-[#141619] px-4 py-3 outline-none focus:border-[#0A21C0]"
                   />
@@ -500,12 +502,7 @@ export default function DevicesPage() {
                   <input
                     type="text"
                     value={form.location}
-                    onChange={(e) =>
-                      handleChange(
-                        "location",
-                        e.target.value
-                      )
-                    }
+                    onChange={(e) => handleChange("location", e.target.value)}
                     placeholder="Building A"
                     className="w-full rounded-lg border border-white/10 bg-[#141619] px-4 py-3 outline-none focus:border-[#0A21C0]"
                   />
@@ -520,12 +517,7 @@ export default function DevicesPage() {
                   <input
                     type="text"
                     value={form.mqttTopic}
-                    onChange={(e) =>
-                      handleChange(
-                        "mqttTopic",
-                        e.target.value
-                      )
-                    }
+                    onChange={(e) => handleChange("mqttTopic", e.target.value)}
                     placeholder="bins/A-001"
                     className="w-full rounded-lg border border-white/10 bg-[#141619] px-4 py-3 outline-none focus:border-[#0A21C0]"
                   />
@@ -543,10 +535,7 @@ export default function DevicesPage() {
                     max="100"
                     value={form.thresholdPct}
                     onChange={(e) =>
-                      handleChange(
-                        "thresholdPct",
-                        Number(e.target.value)
-                      )
+                      handleChange("thresholdPct", Number(e.target.value))
                     }
                     className="w-full rounded-lg border border-white/10 bg-[#141619] px-4 py-3 outline-none focus:border-[#0A21C0]"
                   />
@@ -571,8 +560,8 @@ export default function DevicesPage() {
                     {saving
                       ? "กำลังบันทึก..."
                       : editingBin
-                      ? "บันทึกการแก้ไข"
-                      : "เพิ่ม Bin"}
+                        ? "บันทึกการแก้ไข"
+                        : "เพิ่ม Bin"}
                   </button>
                 </div>
               </form>
@@ -581,6 +570,51 @@ export default function DevicesPage() {
         )}
       </div>
     </main>
+  );
+}
+
+/* =========================
+   Devices Skeleton Component
+========================= */
+
+function DevicesSkeleton() {
+  return (
+    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="animate-pulse rounded-2xl bg-[#2C2E3A] p-6">
+          {/* Header Skeleton */}
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              {/* Icon Box */}
+              <div className="h-12 w-12 rounded-xl bg-white/10" />
+              {/* Name & ID */}
+              <div className="space-y-2">
+                <div className="h-4 w-28 rounded bg-white/10" />
+                <div className="h-3 w-16 rounded bg-white/10" />
+              </div>
+            </div>
+            {/* Status Badge */}
+            <div className="h-6 w-16 rounded-full bg-white/10" />
+          </div>
+
+          {/* Info Rows Skeleton */}
+          <div className="mt-6 space-y-3">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div key={idx} className="flex items-center justify-between">
+                <div className="h-4 w-20 rounded bg-white/10" />
+                <div className="h-4 w-24 rounded bg-white/10" />
+              </div>
+            ))}
+          </div>
+
+          {/* Actions Skeleton */}
+          <div className="mt-6 flex gap-3 border-t border-white/10 pt-5">
+            <div className="h-9 flex-1 rounded-lg bg-white/10" />
+            <div className="h-9 flex-1 rounded-lg bg-white/10" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -600,9 +634,7 @@ function BinCard({
   onDelete: () => void;
 }) {
   const isOnline = bin.lastSeen
-    ? Date.now() -
-        new Date(bin.lastSeen).getTime() <
-      60_000
+    ? Date.now() - new Date(bin.lastSeen).getTime() < 60_000
     : false;
 
   return (
@@ -610,18 +642,14 @@ function BinCard({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#050A44] text-2xl">
-            🗑️
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#050A44] text-[#DAF1DE]">
+            <Trash2 className="h-6 w-6" />
           </div>
 
           <div>
-            <h3 className="font-bold">
-              {bin.name}
-            </h3>
+            <h3 className="font-bold">{bin.name}</h3>
 
-            <p className="text-sm text-gray-400">
-              {bin.binId}
-            </p>
+            <p className="text-sm text-gray-400">{bin.binId}</p>
           </div>
         </div>
 
@@ -639,45 +667,39 @@ function BinCard({
       {/* Info */}
       <div className="mt-6 space-y-3">
         <InfoRow
+          icon={<MapPin className="h-4 w-4 text-gray-400" />}
           label="Location"
           value={bin.location}
         />
 
         <InfoRow
+          icon={<Radio className="h-4 w-4 text-gray-400" />}
           label="MQTT"
           value={bin.mqttTopic}
         />
 
         <InfoRow
+          icon={<Gauge className="h-4 w-4 text-gray-400" />}
           label="Threshold"
           value={`${bin.thresholdPct}%`}
         />
 
         <InfoRow
+          icon={<BarChart2 className="h-4 w-4 text-gray-400" />}
           label="Level"
-          value={
-            bin.level !== undefined
-              ? `${bin.level}%`
-              : "-"
-          }
+          value={bin.level !== undefined ? `${bin.level}%` : "-"}
         />
 
         <InfoRow
+          icon={<Battery className="h-4 w-4 text-gray-400" />}
           label="Battery"
-          value={
-            bin.batteryPct !== undefined
-              ? `${bin.batteryPct}%`
-              : "-"
-          }
+          value={bin.batteryPct !== undefined ? `${bin.batteryPct}%` : "-"}
         />
 
         <InfoRow
+          icon={<Zap className="h-4 w-4 text-gray-400" />}
           label="Voltage"
-          value={
-            bin.voltage !== undefined
-              ? `${bin.voltage} V`
-              : "-"
-          }
+          value={bin.voltage !== undefined ? `${bin.voltage} V` : "-"}
         />
       </div>
 
@@ -686,16 +708,18 @@ function BinCard({
         <div className="mt-6 flex gap-3 border-t border-white/10 pt-5">
           <button
             onClick={onEdit}
-            className="flex-1 rounded-lg bg-[#050A44] px-4 py-2 text-sm hover:bg-[#0A21C0]"
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#050A44] px-4 py-2 text-sm hover:bg-[#0A21C0]"
           >
-            ✏️ แก้ไข
+            <Pencil className="h-4 w-4" />
+            แก้ไข
           </button>
 
           <button
             onClick={onDelete}
-            className="flex-1 rounded-lg bg-red-500/10 px-4 py-2 text-sm text-red-400 hover:bg-red-500/20"
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500/10 px-4 py-2 text-sm text-red-400 hover:bg-red-500/20"
           >
-            🗑️ ลบ
+            <Trash2 className="h-4 w-4" />
+            ลบ
           </button>
         </div>
       )}
@@ -708,21 +732,22 @@ function BinCard({
 ========================= */
 
 function InfoRow({
+  icon,
   label,
   value,
 }: {
+  icon?: React.ReactNode;
   label: string;
   value: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="text-sm text-gray-400">
-        {label}
-      </span>
+      <div className="flex items-center gap-2 text-sm text-gray-400">
+        {icon}
+        <span>{label}</span>
+      </div>
 
-      <span className="max-w-[60%] truncate text-right text-sm">
-        {value}
-      </span>
+      <span className="max-w-[60%] truncate text-right text-sm">{value}</span>
     </div>
   );
 }
