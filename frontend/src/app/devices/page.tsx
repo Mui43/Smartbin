@@ -15,7 +15,7 @@ import {
   Loader2,
   Command,
 } from "lucide-react";
-import Swal from "sweetalert2"; // 1. นำเข้า SweetAlert2
+import Swal from "sweetalert2";
 
 import Sidebar from "@/components/layout/Sidebar";
 
@@ -215,16 +215,15 @@ export default function DevicesPage() {
         const errorMsg = result?.error?.message || "ไม่สามารถบันทึกข้อมูลได้";
         setError(errorMsg);
 
-        // แจ้งเตือนเมื่อบันทึกไม่สำเร็จ
         Swal.fire({
           title: "บันทึกไม่สำเร็จ!",
           text: errorMsg,
           icon: "error",
-          background: "#3B4953",
-          color: "#EBF4DD",
-          confirmButtonColor: "#5A7863",
+          background: "#131822",
+          color: "#ffffff",
+          confirmButtonColor: "#10b981",
           customClass: {
-            popup: "rounded-2xl border border-[#5A7863]/40 shadow-2xl",
+            popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
             confirmButton: "px-5 py-2.5 rounded-xl font-semibold",
           },
         });
@@ -234,7 +233,6 @@ export default function DevicesPage() {
       closeModal();
       await loadBins();
 
-      // แสดง Toast แจ้งเตือนเมื่อบันทึกสำเร็จ
       Swal.fire({
         title: isEditing ? "แก้ไขข้อมูลสำเร็จ!" : "เพิ่มอุปกรณ์สำเร็จ!",
         text: isEditing
@@ -243,10 +241,10 @@ export default function DevicesPage() {
         icon: "success",
         timer: 2000,
         showConfirmButton: false,
-        background: "#3B4953",
-        color: "#EBF4DD",
+        background: "#131822",
+        color: "#ffffff",
         customClass: {
-          popup: "rounded-2xl border border-[#5A7863]/40 shadow-2xl",
+          popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
         },
       });
     } catch (err) {
@@ -258,11 +256,11 @@ export default function DevicesPage() {
         title: "เชื่อมต่อล้มเหลว!",
         text: connError,
         icon: "error",
-        background: "#3B4953",
-        color: "#EBF4DD",
-        confirmButtonColor: "#5A7863",
+        background: "#131822",
+        color: "#ffffff",
+        confirmButtonColor: "#10b981",
         customClass: {
-          popup: "rounded-2xl border border-[#5A7863]/40 shadow-2xl",
+          popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
           confirmButton: "px-5 py-2.5 rounded-xl font-semibold",
         },
       });
@@ -274,7 +272,6 @@ export default function DevicesPage() {
   async function handleDelete(bin: Bin) {
     if (!accessToken) return;
 
-    // แสดง SweetAlert2 Confirmation Dialog
     const result = await Swal.fire({
       title: "ยืนยันการลบอุปกรณ์?",
       text: `คุณต้องการลบ ${bin.name} (${bin.binId}) ใช่หรือไม่?`,
@@ -283,15 +280,15 @@ export default function DevicesPage() {
       confirmButtonText: "ใช่, ลบเลย!",
       cancelButtonText: "ยกเลิก",
       reverseButtons: true,
-      // ตกแต่งธีมให้เข้ากับโทนสี Dark Mode ของคุณ (#202A30, #3B4953, #90AB8B)
-      background: "#3B4953",
-      color: "#EBF4DD",
-      confirmButtonColor: "#ef4444", // สีแดงสำหรับการลบ
-      cancelButtonColor: "#5A7863", // สีเขียวธีมระบบ
+      background: "#131822",
+      color: "#ffffff",
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#212b3d",
       customClass: {
-        popup: "rounded-2xl border border-[#5A7863]/40 shadow-2xl",
+        popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
         confirmButton: "px-5 py-2.5 rounded-xl font-semibold",
-        cancelButton: "px-5 py-2.5 rounded-xl font-semibold",
+        cancelButton:
+          "px-5 py-2.5 rounded-xl font-semibold text-slate-300 hover:text-white",
       },
     });
 
@@ -313,33 +310,31 @@ export default function DevicesPage() {
         const errorMsg = resResult?.error?.message || "ไม่สามารถลบ Bin ได้";
         setError(errorMsg);
 
-        // แจ้งเตือนเมื่อเกิดข้อผิดพลาด
         Swal.fire({
           title: "เกิดข้อผิดพลาด!",
           text: errorMsg,
           icon: "error",
-          background: "#3B4953",
-          color: "#EBF4DD",
-          confirmButtonColor: "#5A7863",
+          background: "#131822",
+          color: "#ffffff",
+          confirmButtonColor: "#10b981",
           customClass: {
-            popup: "rounded-2xl border border-[#5A7863]/40 shadow-2xl",
+            popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
             confirmButton: "px-5 py-2.5 rounded-xl font-semibold",
           },
         });
         return;
       }
 
-      // แสดง Toast แจ้งเตือนความสำเร็จ
       Swal.fire({
         title: "ลบสำเร็จ!",
         text: `ลบ ${bin.name} เรียบร้อยแล้ว`,
         icon: "success",
         timer: 2000,
         showConfirmButton: false,
-        background: "#3B4953",
-        color: "#EBF4DD",
+        background: "#131822",
+        color: "#ffffff",
         customClass: {
-          popup: "rounded-2xl border border-[#5A7863]/40 shadow-2xl",
+          popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
         },
       });
 
@@ -353,11 +348,11 @@ export default function DevicesPage() {
         title: "เชื่อมต่อล้มเหลว!",
         text: connError,
         icon: "error",
-        background: "#3B4953",
-        color: "#EBF4DD",
-        confirmButtonColor: "#5A7863",
+        background: "#131822",
+        color: "#ffffff",
+        confirmButtonColor: "#10b981",
         customClass: {
-          popup: "rounded-2xl border border-[#5A7863]/40 shadow-2xl",
+          popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
           confirmButton: "px-5 py-2.5 rounded-xl font-semibold",
         },
       });
@@ -370,25 +365,27 @@ export default function DevicesPage() {
 
   if (!session) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#202A30] p-6 text-[#EBF4DD]">
+      <main className="flex min-h-screen items-center justify-center bg-[#0a0d14] p-6 text-white">
         กรุณาเข้าสู่ระบบ
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#202A30] text-[#EBF4DD]">
+    <main className="min-h-screen bg-[#0a0d14] text-white">
       <Sidebar />
 
       <div className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
         {/* Header */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
+            <p className="text-xs font-medium uppercase tracking-wider text-emerald-500">
               Management
             </p>
-            <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Devices</h1>
-            <p className="mt-2 text-sm text-[#90AB8B]">
+            <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
+              Devices
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
               จัดการ Smart Bin และตรวจสอบสถานะอุปกรณ์
             </p>
           </div>
@@ -396,7 +393,7 @@ export default function DevicesPage() {
           {canManage && (
             <button
               onClick={openAddModal}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#5A7863] px-5 py-3 font-semibold text-[#EBF4DD] shadow-lg transition hover:bg-[#90AB8B] hover:text-[#202A30] active:scale-[0.98] sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-lg transition hover:bg-emerald-500 active:scale-[0.98] sm:w-auto"
             >
               <Plus className="h-5 w-5" />
               <span>Add Device</span>
@@ -413,17 +410,17 @@ export default function DevicesPage() {
               <SummaryCard
                 label="Total Devices"
                 value={bins.length}
-                icon={<Cpu className="h-5 w-5" />}
+                icon={<Cpu className="h-5 w-5 text-slate-400" />}
               />
               <SummaryCard
                 label="Online"
                 value={onlineCount}
-                icon={<Wifi className="h-5 w-5 text-[#90AB8B]" />}
+                icon={<Wifi className="h-5 w-5 text-emerald-400" />}
               />
               <SummaryCard
                 label="Offline"
                 value={offlineCount}
-                icon={<WifiOff className="h-5 w-5 text-red-400" />}
+                icon={<WifiOff className="h-5 w-5 text-rose-500" />}
               />
             </>
           )}
@@ -438,7 +435,7 @@ export default function DevicesPage() {
 
         {/* Error Notification */}
         {error && (
-          <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-300">
+          <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-400">
             {error}
           </div>
         )}
@@ -512,8 +509,8 @@ function DeviceSearchBar({
 
   return (
     <div className="relative mt-6 w-full">
-      <div className="group relative flex items-center overflow-hidden rounded-2xl border border-[#5A7863]/30 bg-[#3B4953]/80 p-1.5 shadow-xl backdrop-blur-md transition-all duration-300 focus-within:border-[#90AB8B] focus-within:ring-4 focus-within:ring-[#90AB8B]/15 hover:border-[#5A7863]/60">
-        <div className="flex items-center pl-3.5 pr-2 text-[#90AB8B] transition-colors group-focus-within:text-[#EBF4DD]">
+      <div className="group relative flex items-center overflow-hidden rounded-xl border border-[#212b3d] bg-[#131822] p-1.5 shadow-md transition-all duration-300 focus-within:border-emerald-500/50 focus-within:ring-2 focus-within:ring-emerald-500/20">
+        <div className="flex items-center pl-3.5 pr-2 text-slate-400 transition-colors group-focus-within:text-emerald-400">
           <Search className="h-5 w-5" />
         </div>
 
@@ -523,7 +520,7 @@ function DeviceSearchBar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="ค้นหา Bin ID, ชื่ออุปกรณ์, สถานที่ หรือ MQTT Topic..."
-          className="w-full bg-transparent py-2.5 pl-1 pr-3 text-sm text-[#EBF4DD] placeholder-[#90AB8B]/60 outline-none transition-all sm:text-base"
+          className="w-full bg-transparent py-2 pl-1 pr-3 text-sm text-white placeholder-slate-500 outline-none transition-all sm:text-base"
         />
 
         <div className="flex items-center gap-2 pr-2">
@@ -531,7 +528,7 @@ function DeviceSearchBar({
             <button
               type="button"
               onClick={() => onSearchChange("")}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#90AB8B] transition hover:bg-[#202A30] hover:text-[#EBF4DD]"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-[#212b3d] hover:text-white"
               title="Clear search"
             >
               <X className="h-4 w-4" />
@@ -539,11 +536,11 @@ function DeviceSearchBar({
           )}
 
           {search ? (
-            <span className="hidden whitespace-nowrap rounded-lg border border-[#90AB8B]/30 bg-[#90AB8B]/15 px-2.5 py-1 text-xs font-semibold text-[#90AB8B] sm:inline-block">
+            <span className="hidden whitespace-nowrap rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-400 sm:inline-block">
               {totalResults} {totalResults === 1 ? "device" : "devices"}
             </span>
           ) : (
-            <kbd className="hidden items-center gap-1 rounded-md border border-[#5A7863]/40 bg-[#202A30]/60 px-2 py-1 text-[10px] font-medium text-[#90AB8B] sm:inline-flex">
+            <kbd className="hidden items-center gap-1 rounded-md border border-[#212b3d] bg-[#0a0d14] px-2 py-1 text-[10px] font-medium text-slate-400 sm:inline-flex">
               <Command className="h-3 w-3" />K
             </kbd>
           )}
@@ -572,25 +569,23 @@ function DeviceCard({
   const battery = Math.min(Math.max(bin.batteryPct ?? 0, 0), 100);
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] shadow-xl transition duration-200 hover:-translate-y-0.5 hover:border-[#90AB8B]/40">
-      <div className="border-b border-[#5A7863]/25 p-5">
+    <article className="overflow-hidden rounded-xl border border-[#212b3d] bg-[#131822] shadow-lg transition duration-200 hover:border-slate-700">
+      <div className="border-b border-[#212b3d] p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-lg font-bold text-[#EBF4DD]">
-              {bin.name}
-            </p>
-            <p className="mt-1 font-mono text-xs text-[#90AB8B]">{bin.binId}</p>
+            <p className="truncate text-lg font-bold text-white">{bin.name}</p>
+            <p className="mt-1 font-mono text-xs text-slate-400">{bin.binId}</p>
           </div>
           <StatusBadge online={online} />
         </div>
 
-        <div className="mt-4 flex items-center gap-2 text-sm text-[#90AB8B]">
-          <MapPin className="h-4 w-4 shrink-0 text-[#90AB8B]" />
+        <div className="mt-4 flex items-center gap-2 text-sm text-slate-400">
+          <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
           <span className="truncate">{bin.location}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-px bg-[#5A7863]/20">
+      <div className="grid grid-cols-3 gap-px bg-[#212b3d]">
         <DeviceStat label="Level" value={`${level}%`} />
         <DeviceStat label="Battery" value={`${battery}%`} />
         <DeviceStat
@@ -603,55 +598,50 @@ function DeviceCard({
 
       <div className="p-5">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-[#90AB8B]">Waste Level</span>
-          <span className="font-medium text-[#EBF4DD]">{level}%</span>
+          <span className="text-slate-400">Waste level</span>
+          <span className="font-medium text-amber-500">{level}%</span>
         </div>
 
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#202A30]">
+        {/* Progress Bar (เขียว -> เหลือง แบบ Gradient ตามภาพ) */}
+        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#0a0d14]">
           <div
-            className={`h-full rounded-full transition-all ${
-              level >= 90
-                ? "bg-red-400"
-                : level >= 75
-                  ? "bg-yellow-300"
-                  : "bg-[#90AB8B]"
-            }`}
+            className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-amber-400 transition-all duration-300"
             style={{ width: `${level}%` }}
           />
         </div>
 
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-5 flex items-center justify-between">
           <div>
-            <p className="text-xs text-[#90AB8B]">Threshold</p>
-            <p className="mt-1 text-sm font-semibold text-[#EBF4DD]">
+            <p className="text-xs text-slate-400">Threshold</p>
+            <p className="mt-1 text-sm font-semibold text-amber-500">
               {bin.thresholdPct}%
             </p>
           </div>
 
           <div className="text-right">
-            <p className="text-xs text-[#90AB8B]">Last Seen</p>
-            <p className="mt-1 text-xs text-[#EBF4DD]">
-              {bin.lastSeen ? formatDate(bin.lastSeen) : "--"}
+            <p className="text-xs text-slate-400">Last seen</p>
+            <p className="mt-1 text-xs font-semibold text-white">
+              {bin.lastSeen ? formatDate(bin.lastSeen) : "00:00"}
             </p>
           </div>
         </div>
       </div>
 
       {canManage && (
-        <div className="grid grid-cols-2 gap-3 border-t border-[#5A7863]/25 p-4">
+        <div className="grid grid-cols-2 gap-3 border-t border-[#212b3d] p-4">
           <button
             onClick={onEdit}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#5A7863]/50 bg-[#202A30] px-4 py-2.5 text-sm font-medium text-[#EBF4DD] transition hover:bg-[#5A7863]"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#212b3d] bg-[#0a0d14] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1f283a]"
           >
-            <Edit className="h-4 w-4 text-[#90AB8B]" />
+            <Edit className="h-4 w-4 text-slate-400" />
             <span>Edit</span>
           </button>
 
           <button
             onClick={onDelete}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-2.5 text-sm font-medium text-red-300 transition hover:bg-red-400/10"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/5 px-4 py-2 text-sm font-medium text-rose-500 transition hover:bg-rose-500/10"
           >
-            <Trash2 className="h-4 w-4 text-red-400" />
+            <Trash2 className="h-4 w-4 text-rose-500" />
             <span>Delete</span>
           </button>
         </div>
@@ -682,20 +672,20 @@ function DeviceModal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#5A7863]/40 bg-[#3B4953] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#5A7863]/30 p-5 sm:p-6">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#212b3d] bg-[#131822] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#212b3d] p-5 sm:p-6">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
+            <p className="text-xs font-medium uppercase tracking-wider text-emerald-500">
               Device Management
             </p>
-            <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">
+            <h2 className="mt-1 text-xl font-bold text-white">
               {editing ? "Edit Device" : "Add Device"}
             </h2>
           </div>
@@ -703,7 +693,7 @@ function DeviceModal({
           <button
             onClick={onClose}
             disabled={saving}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[#90AB8B] transition hover:bg-[#202A30] hover:text-[#EBF4DD]"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-[#212b3d] hover:text-white"
           >
             <X className="h-5 w-5" />
           </button>
@@ -740,7 +730,7 @@ function DeviceModal({
           />
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-[#EBF4DD]">
+            <label className="mb-2 block text-sm font-medium text-white">
               Full Threshold
             </label>
 
@@ -753,17 +743,17 @@ function DeviceModal({
                 onChange={(event) =>
                   onChange("thresholdPct", Number(event.target.value))
                 }
-                className="w-full accent-[#90AB8B]"
+                className="w-full accent-emerald-500"
               />
 
-              <span className="w-14 rounded-lg bg-[#202A30] px-2 py-2 text-center text-sm font-semibold text-[#EBF4DD]">
+              <span className="w-14 rounded-lg border border-[#212b3d] bg-[#0a0d14] px-2 py-2 text-center text-sm font-semibold text-white">
                 {form.thresholdPct}%
               </span>
             </div>
           </div>
 
           {error && (
-            <div className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-300">
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-400">
               {error}
             </div>
           )}
@@ -773,7 +763,7 @@ function DeviceModal({
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-5 py-3 text-sm font-medium text-[#EBF4DD] transition hover:bg-[#5A7863] disabled:opacity-50"
+              className="rounded-xl border border-[#212b3d] bg-[#0a0d14] px-5 py-3 text-sm font-medium text-slate-300 transition hover:bg-[#212b3d] hover:text-white disabled:opacity-50"
             >
               Cancel
             </button>
@@ -781,7 +771,7 @@ function DeviceModal({
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#5A7863] px-5 py-3 text-sm font-semibold text-[#EBF4DD] transition hover:bg-[#90AB8B] hover:text-[#202A30] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? (
                 <>
@@ -819,7 +809,7 @@ function FormField({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-medium text-[#EBF4DD]">
+      <label className="mb-2 block text-sm font-medium text-white">
         {label}
       </label>
 
@@ -829,7 +819,7 @@ function FormField({
         required
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-4 py-3 text-[#EBF4DD] outline-none transition placeholder:text-[#90AB8B]/50 focus:border-[#90AB8B] focus:ring-2 focus:ring-[#90AB8B]/20 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
       />
     </div>
   );
@@ -848,14 +838,14 @@ function SummaryCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] p-5 shadow-xl">
+    <div className="rounded-xl border border-[#212b3d] bg-[#131822] p-5 shadow-lg">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-[#90AB8B]">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-[#EBF4DD]">{value}</p>
+          <p className="text-sm text-slate-400">{label}</p>
+          <p className="mt-2 text-3xl font-bold text-white">{value}</p>
         </div>
 
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#202A30] text-[#EBF4DD]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0a0d14] border border-[#212b3d]">
           {icon}
         </div>
       </div>
@@ -868,9 +858,9 @@ function SummaryCard({
 ================================================== */
 function DeviceStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-[#202A30] p-4">
-      <p className="text-xs text-[#90AB8B]">{label}</p>
-      <p className="mt-1 text-sm font-bold text-[#EBF4DD]">{value}</p>
+    <div className="bg-[#0a0d14] p-4">
+      <p className="text-xs text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-bold text-white">{value}</p>
     </div>
   );
 }
@@ -881,13 +871,15 @@ function DeviceStat({ label, value }: { label: string; value: string }) {
 function StatusBadge({ online }: { online: boolean }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-        online ? "bg-[#90AB8B]/10 text-[#90AB8B]" : "bg-red-400/10 text-red-300"
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+        online
+          ? "border-emerald-900 bg-emerald-950/60 text-emerald-400"
+          : "border-rose-900 bg-rose-950/60 text-rose-400"
       }`}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${
-          online ? "bg-[#90AB8B]" : "bg-red-300"
+          online ? "bg-emerald-400" : "bg-rose-400"
         }`}
       />
       {online ? "Online" : "Offline"}
@@ -910,7 +902,7 @@ function isOnline(bin: Bin) {
 ================================================== */
 function formatDate(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "--";
+  if (Number.isNaN(date.getTime())) return "00:00";
 
   return date.toLocaleTimeString("th-TH", {
     hour: "2-digit",
@@ -927,60 +919,56 @@ function LoadingCards() {
       {[1, 2, 3, 4, 5, 6].map((item) => (
         <div
           key={item}
-          className="animate-pulse overflow-hidden rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] shadow-xl"
+          className="animate-pulse overflow-hidden rounded-xl border border-[#212b3d] bg-[#131822]"
         >
-          {/* Header Skeleton */}
-          <div className="border-b border-[#5A7863]/25 p-5">
+          <div className="border-b border-[#212b3d] p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-2">
-                <div className="h-5 w-32 rounded-md bg-[#202A30]/80" />
-                <div className="h-3 w-16 rounded-md bg-[#202A30]/60" />
+                <div className="h-5 w-32 rounded-md bg-[#212b3d]" />
+                <div className="h-3 w-16 rounded-md bg-[#212b3d]/60" />
               </div>
-              <div className="h-6 w-16 rounded-full bg-[#202A30]/80" />
+              <div className="h-6 w-16 rounded-full bg-[#212b3d]" />
             </div>
 
             <div className="mt-4 flex items-center gap-2">
-              <div className="h-4 w-4 rounded-full bg-[#202A30]/60" />
-              <div className="h-4 w-28 rounded-md bg-[#202A30]/60" />
+              <div className="h-4 w-4 rounded-full bg-[#212b3d]" />
+              <div className="h-4 w-28 rounded-md bg-[#212b3d]" />
             </div>
           </div>
 
-          {/* Stats Grid Skeleton */}
-          <div className="grid grid-cols-3 gap-px bg-[#5A7863]/20">
+          <div className="grid grid-cols-3 gap-px bg-[#212b3d]">
             {[1, 2, 3].map((stat) => (
-              <div key={stat} className="bg-[#202A30]/60 p-4 space-y-2">
-                <div className="h-3 w-10 rounded bg-[#3B4953]/60" />
-                <div className="h-4 w-12 rounded bg-[#3B4953]/80" />
+              <div key={stat} className="bg-[#0a0d14] p-4 space-y-2">
+                <div className="h-3 w-10 rounded bg-[#212b3d]" />
+                <div className="h-4 w-12 rounded bg-[#212b3d]" />
               </div>
             ))}
           </div>
 
-          {/* Progress & Threshold Skeleton */}
           <div className="p-5 space-y-4">
             <div className="space-y-2">
               <div className="flex justify-between">
-                <div className="h-3 w-16 rounded bg-[#202A30]/60" />
-                <div className="h-3 w-8 rounded bg-[#202A30]/60" />
+                <div className="h-3 w-16 rounded bg-[#212b3d]" />
+                <div className="h-3 w-8 rounded bg-[#212b3d]" />
               </div>
-              <div className="h-2 w-full rounded-full bg-[#202A30]" />
+              <div className="h-2.5 w-full rounded-full bg-[#0a0d14]" />
             </div>
 
             <div className="flex items-center justify-between pt-2">
               <div className="space-y-1">
-                <div className="h-3 w-14 rounded bg-[#202A30]/60" />
-                <div className="h-4 w-10 rounded bg-[#202A30]/80" />
+                <div className="h-3 w-14 rounded bg-[#212b3d]" />
+                <div className="h-4 w-10 rounded bg-[#212b3d]" />
               </div>
               <div className="space-y-1 text-right">
-                <div className="h-3 w-14 rounded bg-[#202A30]/60" />
-                <div className="h-3 w-12 rounded bg-[#202A30]/80" />
+                <div className="h-3 w-14 rounded bg-[#212b3d]" />
+                <div className="h-3 w-12 rounded bg-[#212b3d]" />
               </div>
             </div>
           </div>
 
-          {/* Buttons Skeleton */}
-          <div className="grid grid-cols-2 gap-3 border-t border-[#5A7863]/25 p-4">
-            <div className="h-10 rounded-xl bg-[#202A30]/80" />
-            <div className="h-10 rounded-xl bg-[#202A30]/80" />
+          <div className="grid grid-cols-2 gap-3 border-t border-[#212b3d] p-4">
+            <div className="h-9 rounded-lg bg-[#0a0d14]" />
+            <div className="h-9 rounded-lg bg-[#0a0d14]" />
           </div>
         </div>
       ))}
@@ -994,14 +982,14 @@ function SummarySkeleton() {
       {[1, 2, 3].map((item) => (
         <div
           key={item}
-          className="animate-pulse rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] p-5 shadow-xl"
+          className="animate-pulse rounded-xl border border-[#212b3d] bg-[#131822] p-5 shadow-lg"
         >
           <div className="flex items-center justify-between">
             <div className="space-y-2">
-              <div className="h-4 w-20 rounded bg-[#202A30]/60" />
-              <div className="h-8 w-12 rounded bg-[#202A30]/80" />
+              <div className="h-4 w-20 rounded bg-[#212b3d]" />
+              <div className="h-8 w-12 rounded bg-[#212b3d]" />
             </div>
-            <div className="h-11 w-11 rounded-xl bg-[#202A30]" />
+            <div className="h-10 w-10 rounded-lg bg-[#0a0d14]" />
           </div>
         </div>
       ))}
@@ -1019,16 +1007,16 @@ function EmptyState({
   onAdd: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] p-10 text-center shadow-xl">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#202A30] text-[#90AB8B]">
+    <div className="rounded-xl border border-[#212b3d] bg-[#131822] p-10 text-center shadow-lg">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0a0d14] text-slate-400 border border-[#212b3d]">
         <Cpu className="h-8 w-8" />
       </div>
 
-      <h2 className="mt-5 text-lg font-bold text-[#EBF4DD]">
+      <h2 className="mt-5 text-lg font-bold text-white">
         {search ? "ไม่พบ Device" : "ยังไม่มี Device"}
       </h2>
 
-      <p className="mx-auto mt-2 max-w-md text-sm text-[#90AB8B]">
+      <p className="mx-auto mt-2 max-w-md text-sm text-slate-400">
         {search
           ? "ลองเปลี่ยนคำค้นหาแล้วค้นหาอีกครั้ง"
           : "เพิ่ม Smart Bin เครื่องแรกเพื่อเริ่มต้นระบบ"}
@@ -1037,7 +1025,7 @@ function EmptyState({
       {!search && canManage && (
         <button
           onClick={onAdd}
-          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#5A7863] px-5 py-3 font-semibold text-[#EBF4DD] transition hover:bg-[#90AB8B] hover:text-[#202A30]"
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white transition hover:bg-emerald-500"
         >
           <Plus className="h-5 w-5" />
           <span>Add Device</span>
@@ -1049,9 +1037,9 @@ function EmptyState({
 
 function PageLoading() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#202A30] text-[#EBF4DD]">
-      <div className="text-center text-[#90AB8B]">
-        <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#90AB8B]" />
+    <main className="flex min-h-screen items-center justify-center bg-[#0a0d14] text-white">
+      <div className="text-center text-slate-400">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-500" />
         <p className="mt-3 text-sm">Loading Devices...</p>
       </div>
     </main>

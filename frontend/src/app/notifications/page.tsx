@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useState, ElementType, ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useTransition,
+  ElementType,
+  ReactNode,
+} from "react";
 import { useSession } from "next-auth/react";
 import {
   Bell,
@@ -74,6 +81,7 @@ const ALERT_TYPES: { value: string; label: string }[] = [
 
 export default function NotificationsPage() {
   const { data: session, status } = useSession();
+  const [isPending, startTransition] = useTransition();
 
   const [alerts, setAlerts] = useState<AlertData[]>([]);
   const [pagination, setPagination] = useState<PaginationData | null>(null);
@@ -82,17 +90,21 @@ export default function NotificationsPage() {
   const [active, setActive] = useState("");
   const [page, setPage] = useState(1);
 
-  const [loading, setLoading] = useState(true);
+  // initialLoading เอาไว้เปิด Skeleton เฉพาะตอนโหลดเข้าหน้าเว็บครั้งแรกเท่านั้น
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadAlerts() {
-    if (!session?.user?.accessToken) {
-      setLoading(false);
+  const accessToken = session?.user?.accessToken;
+
+  const loadAlerts = useCallback(async () => {
+    if (!accessToken) {
+      setInitialLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
+      setIsFetching(true);
       setError("");
 
       const params = new URLSearchParams({
@@ -107,7 +119,7 @@ export default function NotificationsPage() {
         `${API_URL}/api/alerts/history?${params.toString()}`,
         {
           headers: {
-            Authorization: `Bearer ${session.user.accessToken}`,
+            Authorization: `Bearer ${accessToken}`,
           },
           cache: "no-store",
         },
@@ -117,8 +129,6 @@ export default function NotificationsPage() {
 
       if (!response.ok) {
         setError(result?.error?.message || "ไม่สามารถโหลดการแจ้งเตือนได้");
-        setAlerts([]);
-        setPagination(null);
         return;
       }
 
@@ -129,34 +139,43 @@ export default function NotificationsPage() {
     } catch (err) {
       console.error("Load alerts error:", err);
       setError("ไม่สามารถเชื่อมต่อ Backend ได้");
-      setAlerts([]);
-      setPagination(null);
     } finally {
-      setLoading(false);
+      setIsFetching(false);
+      setInitialLoading(false);
     }
-  }
+  }, [accessToken, page, type, active]);
 
   useEffect(() => {
     if (status === "authenticated") {
       loadAlerts();
     }
-  }, [status, session, page, type, active]);
+  }, [status, loadAlerts]);
+
+  const handleFilterChange = (newType: string, newActive: string) => {
+    startTransition(() => {
+      setType(newType);
+      setActive(newActive);
+      setPage(1);
+    });
+  };
 
   function handleResetFilters() {
-    setType("");
-    setActive("");
-    setPage(1);
+    startTransition(() => {
+      setType("");
+      setActive("");
+      setPage(1);
+    });
   }
 
-  if (status === "loading") {
+  if (status === "loading" || initialLoading) {
     return <PageSkeleton />;
   }
 
   if (status !== "authenticated" || !session) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#202A30] p-4 text-[#EBF4DD]">
-        <div className="rounded-xl border border-[#5A7863]/30 bg-[#3B4953] p-6 text-center shadow-xl">
-          <p className="text-[#90AB8B]">กรุณาเข้าสู่ระบบ</p>
+      <main className="flex min-h-screen items-center justify-center bg-[#0a0d14] p-4 text-white">
+        <div className="rounded-2xl border border-[#212b3d] bg-[#131822] p-6 text-center shadow-2xl">
+          <p className="text-slate-400">กรุณาเข้าสู่ระบบ</p>
         </div>
       </main>
     );
@@ -170,7 +189,7 @@ export default function NotificationsPage() {
   const lineSentCount = alerts.filter((alert) => alert.sentToLine).length;
 
   return (
-    <main className="min-h-screen bg-[#202A30] text-[#EBF4DD]">
+    <main className="min-h-screen bg-[#0a0d14] text-white">
       <Sidebar />
 
       <div className="p-4 pt-20 sm:p-6 lg:ml-64 lg:p-8">
@@ -178,11 +197,16 @@ export default function NotificationsPage() {
 
         {/* Page Header */}
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
-            Monitoring
-          </p>
-          <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Notifications</h1>
-          <p className="mt-1 text-sm text-[#90AB8B]">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
+              Monitoring
+            </span>
+          </div>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            Notifications
+          </h1>
+          <p className="mt-1 text-sm text-slate-400">
             ตรวจสอบการแจ้งเตือนและสถานะของ Smart Bin
           </p>
         </div>
@@ -191,45 +215,42 @@ export default function NotificationsPage() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <SummaryCard title="Total Alerts" value={total} icon={Bell} />
           <SummaryCard
-            title="Active"
+            title="Active (Page)"
             value={activeCount}
             icon={Activity}
-            accent="green"
+            accent="emerald"
           />
           <SummaryCard
-            title="Critical"
+            title="Critical (Page)"
             value={criticalCount}
             icon={AlertTriangle}
             accent="red"
           />
           <SummaryCard
-            title="LINE Sent"
+            title="LINE Sent (Page)"
             value={lineSentCount}
             icon={CheckCircle2}
-            accent="green"
+            accent="emerald"
           />
         </div>
 
         {/* Filters Section */}
-        <section className="mt-6 rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] p-5 shadow-xl sm:p-6">
-          <div className="flex items-center gap-2">
-            <Search className="h-5 w-5 text-[#90AB8B]" />
-            <h2 className="font-semibold">Filter Alerts</h2>
+        <section className="mt-6 rounded-2xl border border-[#212b3d] bg-[#131822] p-5 shadow-xl sm:p-6">
+          <div className="flex items-center gap-2 text-white">
+            <Search className="h-4 w-4 text-slate-400" />
+            <h2 className="font-semibold text-slate-200">Filter Alerts</h2>
           </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {/* Type Selector */}
             <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">
                 Alert Type
               </label>
               <select
                 value={type}
-                onChange={(e) => {
-                  setType(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-[#5A7863]/40 bg-[#202A30] p-3 text-sm text-[#EBF4DD] outline-none transition focus:border-[#90AB8B] focus:ring-2 focus:ring-[#90AB8B]/20"
+                onChange={(e) => handleFilterChange(e.target.value, active)}
+                className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-3 text-sm text-white outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
               >
                 {ALERT_TYPES.map((item) => (
                   <option key={item.value} value={item.value}>
@@ -241,16 +262,13 @@ export default function NotificationsPage() {
 
             {/* Status Selector */}
             <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
+              <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">
                 Status
               </label>
               <select
                 value={active}
-                onChange={(e) => {
-                  setActive(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-[#5A7863]/40 bg-[#202A30] p-3 text-sm text-[#EBF4DD] outline-none transition focus:border-[#90AB8B] focus:ring-2 focus:ring-[#90AB8B]/20"
+                onChange={(e) => handleFilterChange(type, e.target.value)}
+                className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-3 text-sm text-white outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
               >
                 <option value="">All Status</option>
                 <option value="true">Active</option>
@@ -263,7 +281,7 @@ export default function NotificationsPage() {
             <button
               type="button"
               onClick={handleResetFilters}
-              className="mt-4 inline-flex items-center gap-1.5 text-xs text-[#90AB8B] underline underline-offset-4 hover:text-[#EBF4DD]"
+              className="mt-4 inline-flex items-center gap-1.5 text-xs text-slate-400 underline underline-offset-4 transition hover:text-white"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>Reset Filters</span>
@@ -273,39 +291,41 @@ export default function NotificationsPage() {
 
         {/* Error Alert */}
         {error && (
-          <div className="mt-5 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300">
+          <div className="mt-5 rounded-xl border border-rose-900/50 bg-rose-950/40 p-4 text-sm text-rose-400">
             {error}
           </div>
         )}
 
         {/* Alerts List Container */}
-        <section className="mt-6 overflow-hidden rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] shadow-xl">
-          <div className="border-b border-[#5A7863]/30 p-5 sm:p-6">
+        <section
+          className={`mt-6 overflow-hidden rounded-2xl border border-[#212b3d] bg-[#131822] shadow-2xl transition-opacity duration-200 ${
+            isFetching || isPending ? "opacity-60" : "opacity-100"
+          }`}
+        >
+          <div className="border-b border-[#212b3d] p-5 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wider text-[#90AB8B]">
+                <p className="text-xs uppercase tracking-wider text-slate-400">
                   Alert History
                 </p>
-                <h2 className="mt-1 text-xl font-bold">Notifications</h2>
+                <h2 className="mt-1 text-xl font-bold text-white">Notifications</h2>
               </div>
 
               <button
                 type="button"
                 onClick={loadAlerts}
-                disabled={loading}
-                className="flex items-center gap-2 rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-3.5 py-2 text-sm text-[#EBF4DD] transition hover:bg-[#5A7863] active:scale-[0.98] disabled:opacity-50"
+                disabled={isFetching || isPending}
+                className="flex items-center gap-2 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-3.5 py-2 text-sm text-slate-300 transition hover:bg-[#212b3d] hover:text-white active:scale-[0.98] disabled:opacity-50"
               >
                 <RefreshCw
-                  className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                  className={`h-4 w-4 ${isFetching || isPending ? "animate-spin text-emerald-400" : ""}`}
                 />
                 <span>Refresh</span>
               </button>
             </div>
           </div>
 
-          {loading ? (
-            <TableSkeleton />
-          ) : alerts.length === 0 ? (
+          {alerts.length === 0 && !isFetching ? (
             <EmptyAlerts />
           ) : (
             <>
@@ -313,7 +333,7 @@ export default function NotificationsPage() {
               <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[1000px] text-left">
                   <thead>
-                    <tr className="border-b border-[#5A7863]/30 bg-[#202A30]/50">
+                    <tr className="border-b border-[#212b3d] bg-[#0a0d14]/80">
                       <TableHead>Time</TableHead>
                       <TableHead>Device</TableHead>
                       <TableHead>Type</TableHead>
@@ -324,20 +344,20 @@ export default function NotificationsPage() {
                       <TableHead>Resolved</TableHead>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#5A7863]/20 text-sm">
+                  <tbody className="divide-y divide-[#212b3d]/60 text-sm">
                     {alerts.map((alert) => (
                       <tr
                         key={alert._id || `${alert.binId}-${alert.createdAt}`}
-                        className="transition hover:bg-[#5A7863]/10"
+                        className="transition hover:bg-[#212b3d]/30"
                       >
-                        <td className="whitespace-nowrap px-5 py-4 text-xs text-[#90AB8B]">
+                        <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-400">
                           {formatDate(alert.createdAt)}
                         </td>
                         <td className="px-5 py-4">
-                          <p className="font-semibold text-[#EBF4DD]">
+                          <p className="font-semibold text-white">
                             {alert.binName || alert.binId}
                           </p>
-                          <p className="mt-0.5 font-mono text-xs text-[#90AB8B]">
+                          <p className="mt-0.5 font-mono text-xs text-slate-500">
                             {alert.binId}
                           </p>
                         </td>
@@ -347,7 +367,7 @@ export default function NotificationsPage() {
                         <td className="px-5 py-4">
                           <LevelBadge level={alert.level} />
                         </td>
-                        <td className="max-w-xs px-5 py-4 text-[#EBF4DD]">
+                        <td className="max-w-xs px-5 py-4 text-slate-300">
                           {alert.message}
                         </td>
                         <td className="px-5 py-4">
@@ -356,7 +376,7 @@ export default function NotificationsPage() {
                         <td className="px-5 py-4">
                           <LineBadge sent={alert.sentToLine} />
                         </td>
-                        <td className="whitespace-nowrap px-5 py-4 text-xs text-[#90AB8B]">
+                        <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-400">
                           {formatDate(alert.resolvedAt)}
                         </td>
                       </tr>
@@ -383,9 +403,13 @@ export default function NotificationsPage() {
                   hasPrevious={pagination.hasPreviousPage}
                   hasNext={pagination.hasNextPage}
                   onPrevious={() =>
-                    setPage((current) => Math.max(current - 1, 1))
+                    startTransition(() =>
+                      setPage((current) => Math.max(current - 1, 1)),
+                    )
                   }
-                  onNext={() => setPage((current) => current + 1)}
+                  onNext={() =>
+                    startTransition(() => setPage((current) => current + 1))
+                  }
                 />
               )}
             </>
@@ -409,21 +433,21 @@ function SummaryCard({
   title: string;
   value: number;
   icon: ElementType;
-  accent?: "normal" | "green" | "red";
+  accent?: "normal" | "emerald" | "red";
 }) {
   const iconClass =
     accent === "red"
-      ? "bg-red-400/10 text-red-300 border border-red-400/20"
-      : accent === "green"
-        ? "bg-[#90AB8B]/10 text-[#90AB8B] border border-[#90AB8B]/20"
-        : "bg-[#5A7863]/30 text-[#EBF4DD] border border-[#5A7863]/40";
+      ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+      : accent === "emerald"
+        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+        : "bg-[#0a0d14] text-slate-300 border border-[#212b3d]";
 
   return (
-    <div className="rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] p-5 shadow-xl">
+    <div className="rounded-2xl border border-[#212b3d] bg-[#131822] p-5 shadow-xl">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-[#90AB8B]">{title}</p>
-          <p className="mt-2 text-3xl font-bold">{value}</p>
+          <p className="text-sm font-medium text-slate-400">{title}</p>
+          <p className="mt-2 text-3xl font-bold text-white">{value}</p>
         </div>
         <div
           className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconClass}`}
@@ -445,7 +469,7 @@ function TypeBadge({ type }: { type: AlertType }) {
   };
 
   return (
-    <span className="inline-flex whitespace-nowrap rounded-full border border-[#90AB8B]/20 bg-[#90AB8B]/10 px-2.5 py-1 text-xs font-medium text-[#90AB8B]">
+    <span className="inline-flex whitespace-nowrap rounded-full border border-[#212b3d] bg-[#0a0d14] px-2.5 py-1 text-xs font-medium text-slate-300">
       {labels[type] || type}
     </span>
   );
@@ -458,8 +482,8 @@ function LevelBadge({ level }: { level: AlertLevel }) {
     <span
       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${
         critical
-          ? "border-red-400/20 bg-red-400/10 text-red-300"
-          : "border-yellow-300/20 bg-yellow-300/10 text-yellow-300"
+          ? "border-rose-500/30 bg-rose-500/10 text-rose-400"
+          : "border-amber-500/30 bg-amber-500/10 text-amber-400"
       }`}
     >
       {critical ? "Critical" : "Warning"}
@@ -472,13 +496,13 @@ function StatusBadge({ active }: { active?: boolean }) {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
         active
-          ? "border-yellow-300/20 bg-yellow-300/10 text-yellow-300"
-          : "border-[#90AB8B]/20 bg-[#90AB8B]/10 text-[#90AB8B]"
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
       }`}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${
-          active ? "bg-yellow-300" : "bg-[#90AB8B]"
+          active ? "bg-amber-400" : "bg-emerald-400"
         }`}
       />
       {active ? "Active" : "Resolved"}
@@ -491,8 +515,8 @@ function LineBadge({ sent }: { sent?: boolean }) {
     <span
       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${
         sent
-          ? "border-[#90AB8B]/20 bg-[#90AB8B]/10 text-[#90AB8B]"
-          : "border-[#5A7863]/30 bg-[#202A30] text-[#90AB8B]/60"
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+          : "border-[#212b3d] bg-[#0a0d14] text-slate-500"
       }`}
     >
       {sent ? "Sent" : "Not Sent"}
@@ -502,13 +526,13 @@ function LineBadge({ sent }: { sent?: boolean }) {
 
 function AlertCard({ alert }: { alert: AlertData }) {
   return (
-    <article className="rounded-xl border border-[#5A7863]/30 bg-[#202A30] p-4 shadow-sm">
+    <article className="rounded-xl border border-[#212b3d] bg-[#0a0d14] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-[#EBF4DD]">
+          <p className="truncate font-semibold text-white">
             {alert.binName || alert.binId}
           </p>
-          <p className="mt-0.5 font-mono text-xs text-[#90AB8B]">
+          <p className="mt-0.5 font-mono text-xs text-slate-500">
             {alert.binId}
           </p>
         </div>
@@ -521,18 +545,18 @@ function AlertCard({ alert }: { alert: AlertData }) {
         <LineBadge sent={alert.sentToLine} />
       </div>
 
-      <div className="mt-3 rounded-lg bg-[#3B4953] p-3 text-sm text-[#EBF4DD]">
+      <div className="mt-3 rounded-lg border border-[#212b3d] bg-[#131822] p-3 text-sm text-slate-300">
         {alert.message}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
         <div>
-          <p className="text-[#90AB8B]">Created</p>
-          <p className="mt-0.5 text-[#EBF4DD]">{formatDate(alert.createdAt)}</p>
+          <p className="text-slate-500">Created</p>
+          <p className="mt-0.5 text-slate-300">{formatDate(alert.createdAt)}</p>
         </div>
         <div>
-          <p className="text-[#90AB8B]">Resolved</p>
-          <p className="mt-0.5 text-[#EBF4DD]">
+          <p className="text-slate-500">Resolved</p>
+          <p className="mt-0.5 text-slate-300">
             {formatDate(alert.resolvedAt)}
           </p>
         </div>
@@ -543,7 +567,7 @@ function AlertCard({ alert }: { alert: AlertData }) {
 
 function TableHead({ children }: { children: ReactNode }) {
   return (
-    <th className="whitespace-nowrap px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[#90AB8B]">
+    <th className="whitespace-nowrap px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
       {children}
     </th>
   );
@@ -552,13 +576,11 @@ function TableHead({ children }: { children: ReactNode }) {
 function EmptyAlerts() {
   return (
     <div className="p-12 text-center">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#5A7863]/20 text-[#90AB8B]">
-        <Check className="h-8 w-8" />
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#212b3d] bg-[#0a0d14] text-emerald-400">
+        <Check className="h-7 w-7" />
       </div>
-      <h3 className="mt-4 text-lg font-semibold text-[#EBF4DD]">
-        No Notifications
-      </h3>
-      <p className="mt-1 text-sm text-[#90AB8B]">
+      <h3 className="mt-4 font-semibold text-white">No Notifications</h3>
+      <p className="mt-1 text-sm text-slate-400">
         ไม่พบการแจ้งเตือนตามเงื่อนไขที่เลือก
       </p>
     </div>
@@ -581,18 +603,18 @@ function PaginationControls({
   onNext: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between border-t border-[#5A7863]/20 p-4 sm:p-5">
+    <div className="flex items-center justify-between border-t border-[#212b3d] p-4 sm:p-5">
       <button
         type="button"
         onClick={onPrevious}
         disabled={!hasPrevious}
-        className="flex items-center gap-1 rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-3.5 py-2 text-sm font-medium text-[#EBF4DD] transition hover:bg-[#5A7863] disabled:cursor-not-allowed disabled:opacity-30"
+        className="flex items-center gap-1 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-3.5 py-2 text-sm font-medium text-slate-300 transition hover:bg-[#212b3d] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
       >
         <ChevronLeft className="h-4 w-4" />
         <span>Previous</span>
       </button>
 
-      <span className="text-xs text-[#90AB8B] sm:text-sm">
+      <span className="text-xs text-slate-400 sm:text-sm">
         Page {page} / {Math.max(totalPages, 1)}
       </span>
 
@@ -600,7 +622,7 @@ function PaginationControls({
         type="button"
         onClick={onNext}
         disabled={!hasNext}
-        className="flex items-center gap-1 rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-3.5 py-2 text-sm font-medium text-[#EBF4DD] transition hover:bg-[#5A7863] disabled:cursor-not-allowed disabled:opacity-30"
+        className="flex items-center gap-1 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-3.5 py-2 text-sm font-medium text-slate-300 transition hover:bg-[#212b3d] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
       >
         <span>Next</span>
         <ChevronRight className="h-4 w-4" />
@@ -613,39 +635,26 @@ function PaginationControls({
    Skeletons
 ================================================== */
 
-function TableSkeleton() {
-  return (
-    <div className="space-y-3 p-5">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <div
-          key={index}
-          className="h-16 animate-pulse rounded-xl bg-[#202A30]"
-        />
-      ))}
-    </div>
-  );
-}
-
 function PageSkeleton() {
   return (
-    <main className="flex min-h-screen bg-[#202A30]">
+    <main className="flex min-h-screen bg-[#0a0d14]">
       <div className="hidden lg:block lg:w-64" />
       <div className="w-full p-4 pt-20 sm:p-6 lg:p-8">
         <div className="space-y-2">
-          <div className="h-4 w-24 animate-pulse rounded bg-[#3B4953]" />
-          <div className="h-8 w-48 animate-pulse rounded-xl bg-[#3B4953]" />
-          <div className="h-4 w-64 animate-pulse rounded bg-[#3B4953]" />
+          <div className="h-4 w-24 animate-pulse rounded bg-[#131822]" />
+          <div className="h-8 w-48 animate-pulse rounded-xl bg-[#131822]" />
+          <div className="h-4 w-64 animate-pulse rounded bg-[#131822]" />
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-28 animate-pulse rounded-2xl bg-[#3B4953]"
+              className="h-28 animate-pulse rounded-2xl bg-[#131822]"
             />
           ))}
         </div>
-        <div className="mt-6 h-36 animate-pulse rounded-2xl bg-[#3B4953]" />
-        <div className="mt-6 h-96 animate-pulse rounded-2xl bg-[#3B4953]" />
+        <div className="mt-6 h-36 animate-pulse rounded-2xl bg-[#131822]" />
+        <div className="mt-6 h-96 animate-pulse rounded-2xl bg-[#131822]" />
       </div>
     </main>
   );

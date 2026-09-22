@@ -10,6 +10,7 @@ import {
   FileX,
   Loader2,
 } from "lucide-react";
+import Swal from "sweetalert2";
 
 import Sidebar from "@/components/layout/Sidebar";
 import { useTelemetryHistory } from "@/hooks/useTelemetryHistory";
@@ -89,6 +90,32 @@ export default function HistoryPage() {
       return;
     }
 
+    // 1. ถามยืนยันจากผู้ใช้ก่อน
+    const confirmResult = await Swal.fire({
+      title: "ต้องการดาวน์โหลด CSV หรือไม่?",
+      text: `คุณกำลังจะส่งออกข้อมูล Telemetry ของอุปกรณ์ ${selectedBin}`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "ดาวน์โหลด",
+      cancelButtonText: "ยกเลิก",
+      background: "#131822",
+      color: "#ffffff",
+      confirmButtonColor: "#10b981",
+      cancelButtonColor: "#212b3d",
+      customClass: {
+        popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
+        confirmButton: "px-5 py-2.5 rounded-xl font-semibold",
+        cancelButton:
+          "px-5 py-2.5 rounded-xl font-semibold text-slate-300 hover:text-white",
+      },
+    });
+
+    // ถ้ากด "ยกเลิก" หรือปิด Modal ให้หยุดทำรายการ
+    if (!confirmResult.isConfirmed) {
+      return;
+    }
+
+    // 2. ถ้ากด "ดาวน์โหลด" ค่อยเริ่มกระบวนการ Export
     try {
       setExporting(true);
 
@@ -126,11 +153,36 @@ export default function HistoryPage() {
       link.click();
       link.remove();
 
-      // Delay revocation slightly to support all browsers
       setTimeout(() => window.URL.revokeObjectURL(url), 100);
+
+      // แสดง Toast แจ้งเตือนเมื่อดาวน์โหลดสำเร็จ
+      Swal.fire({
+        title: "ส่งออกไฟล์สำเร็จ!",
+        text: `ดาวน์โหลด telemetry-${selectedBin}.csv เรียบร้อยแล้ว`,
+        icon: "success",
+        timer: 2000,
+        showConfirmButton: false,
+        background: "#131822",
+        color: "#ffffff",
+        customClass: {
+          popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
+        },
+      });
     } catch (error) {
       console.error("Export CSV error:", error);
-      alert("ไม่สามารถ Export CSV ได้");
+
+      Swal.fire({
+        title: "Export ไม่สำเร็จ!",
+        text: "ไม่สามารถส่งออกไฟล์ CSV ได้ กรุณาลองใหม่อีกครั้ง",
+        icon: "error",
+        background: "#131822",
+        color: "#ffffff",
+        confirmButtonColor: "#10b981",
+        customClass: {
+          popup: "rounded-2xl border border-[#212b3d] shadow-2xl",
+          confirmButton: "px-5 py-2.5 rounded-xl font-semibold",
+        },
+      });
     } finally {
       setExporting(false);
     }
@@ -142,41 +194,41 @@ export default function HistoryPage() {
 
   if (!session) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#202A30] text-[#EBF4DD]">
+      <main className="flex min-h-screen items-center justify-center bg-[#0a0d14] text-white">
         กรุณาเข้าสู่ระบบ
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#202A30] text-[#EBF4DD]">
+    <main className="min-h-screen bg-[#0a0d14] text-white">
       <Sidebar />
 
       <div className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
         {/* Header */}
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-[#90AB8B]">
+          <p className="text-xs font-medium uppercase tracking-wider text-emerald-500">
             Monitoring
           </p>
 
-          <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
             Telemetry History
           </h1>
 
-          <p className="mt-2 text-sm text-[#90AB8B]">
+          <p className="mt-2 text-sm text-slate-400">
             ตรวจสอบข้อมูลย้อนหลังของ Smart Bin
           </p>
         </div>
 
         {/* Filter Section */}
-        <section className="mt-6 rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] p-5 shadow-xl sm:p-6">
+        <section className="mt-6 rounded-2xl border border-[#212b3d] bg-[#131822] p-5 shadow-xl sm:p-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#202A30] text-[#90AB8B]">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0a0d14] text-emerald-400 border border-[#212b3d]">
               <Search className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-semibold text-[#EBF4DD]">Filter</h2>
-              <p className="text-xs text-[#90AB8B]">
+              <h2 className="font-semibold text-white">Filter</h2>
+              <p className="text-xs text-slate-400">
                 ค้นหาและกรอกข้อมูลย้อนหลัง
               </p>
             </div>
@@ -185,18 +237,18 @@ export default function HistoryPage() {
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {/* Bin */}
             <div>
-              <label className="mb-2 block text-xs font-medium text-[#90AB8B]">
+              <label className="mb-2 block text-xs font-medium text-slate-400">
                 Device
               </label>
 
               {loadingBins ? (
-                <div className="h-[46px] w-full animate-pulse rounded-xl bg-[#202A30]" />
+                <div className="h-[46px] w-full animate-pulse rounded-xl bg-[#0a0d14] border border-[#212b3d]" />
               ) : (
                 <select
                   value={selectedBin}
                   disabled={loadingBins}
                   onChange={(event) => setSelectedBin(event.target.value)}
-                  className="w-full rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-4 py-3 text-sm text-[#EBF4DD] outline-none transition focus:border-[#90AB8B] focus:ring-2 focus:ring-[#90AB8B]/20"
+                  className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
                 >
                   {bins.length === 0 ? (
                     <option value="">No devices</option>
@@ -230,16 +282,16 @@ export default function HistoryPage() {
               <button
                 onClick={handleExport}
                 disabled={exporting || !selectedBin}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#5A7863]/50 bg-[#202A30] px-4 py-3 text-sm font-medium text-[#EBF4DD] shadow-sm transition-all duration-200 hover:border-[#90AB8B] hover:bg-[#5A7863]/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-3 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:border-emerald-500/50 hover:bg-[#1a2232] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {exporting ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin text-[#90AB8B]" />
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
                     <span>Exporting...</span>
                   </>
                 ) : (
                   <>
-                    <Download className="h-4 w-4 text-[#90AB8B]" />
+                    <Download className="h-4 w-4 text-emerald-400" />
                     <span>Export CSV</span>
                   </>
                 )}
@@ -255,7 +307,7 @@ export default function HistoryPage() {
                 setEndDate("");
                 setPage(1);
               }}
-              className="mt-4 text-xs text-[#90AB8B] underline underline-offset-4 hover:text-[#EBF4DD]"
+              className="mt-4 text-xs text-emerald-400 underline underline-offset-4 hover:text-emerald-300"
             >
               Reset date filter
             </button>
@@ -263,22 +315,20 @@ export default function HistoryPage() {
         </section>
 
         {/* Table Section */}
-        <section className="mt-6 overflow-hidden rounded-2xl border border-[#5A7863]/30 bg-[#3B4953] shadow-xl">
+        <section className="mt-6 overflow-hidden rounded-2xl border border-[#212b3d] bg-[#131822] shadow-xl">
           {/* Table Header */}
-          <div className="border-b border-[#5A7863]/30 p-5 sm:p-6">
+          <div className="border-b border-[#212b3d] p-5 sm:p-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wider text-[#90AB8B]">
+                <p className="text-xs uppercase tracking-wider text-emerald-500 font-medium">
                   Data Records
                 </p>
 
-                <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">
-                  Telemetry
-                </h2>
+                <h2 className="mt-1 text-xl font-bold text-white">Telemetry</h2>
               </div>
 
               {pagination && !loading && (
-                <span className="text-xs text-[#90AB8B]">
+                <span className="text-xs text-slate-400">
                   {pagination.total} records
                 </span>
               )}
@@ -288,7 +338,7 @@ export default function HistoryPage() {
           {loading ? (
             <TableSkeleton />
           ) : error ? (
-            <div className="p-8 text-center text-sm text-red-300">{error}</div>
+            <div className="p-8 text-center text-sm text-rose-400">{error}</div>
           ) : data.length === 0 ? (
             <EmptyHistory />
           ) : (
@@ -296,7 +346,7 @@ export default function HistoryPage() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[900px] text-left">
                   <thead>
-                    <tr className="border-b border-[#5A7863]/30 bg-[#202A30]/50">
+                    <tr className="border-b border-[#212b3d] bg-[#0a0d14]/60">
                       <TableHead>Time</TableHead>
                       <TableHead>Level</TableHead>
                       <TableHead>Capacitive</TableHead>
@@ -307,13 +357,13 @@ export default function HistoryPage() {
                     </tr>
                   </thead>
 
-                  <tbody>
+                  <tbody className="divide-y divide-[#212b3d]">
                     {data.map((item) => (
                       <tr
                         key={item._id}
-                        className="border-b border-[#5A7863]/20 transition hover:bg-[#5A7863]/10"
+                        className="transition hover:bg-[#1a2232]"
                       >
-                        <td className="whitespace-nowrap px-5 py-4 text-sm text-[#EBF4DD]">
+                        <td className="whitespace-nowrap px-5 py-4 text-sm text-white">
                           {formatDate(item.timestamp)}
                         </td>
 
@@ -339,14 +389,18 @@ export default function HistoryPage() {
                           />
                         </td>
 
-                        <td className="px-5 py-4 text-sm font-semibold text-[#EBF4DD]">
+                        <td className="px-5 py-4 text-sm font-semibold text-white">
                           {item.voltage?.toFixed(1) ?? "--"}
-                          <span className="ml-1 text-[#90AB8B]">V</span>
+                          <span className="ml-1 text-xs text-slate-400 font-normal">
+                            V
+                          </span>
                         </td>
 
-                        <td className="px-5 py-4 text-sm font-semibold text-[#EBF4DD]">
+                        <td className="px-5 py-4 text-sm font-semibold text-white">
                           {item.batteryPct ?? "--"}
-                          <span className="ml-1 text-[#90AB8B]">%</span>
+                          <span className="ml-1 text-xs text-slate-400 font-normal">
+                            %
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -355,7 +409,7 @@ export default function HistoryPage() {
               </div>
 
               {/* Mobile hint */}
-              <div className="border-t border-[#5A7863]/20 px-5 py-3 text-center text-xs text-[#90AB8B] sm:hidden">
+              <div className="border-t border-[#212b3d] px-5 py-3 text-center text-xs text-slate-400 sm:hidden">
                 ← เลื่อนตารางซ้าย-ขวาเพื่อดูข้อมูล →
               </div>
 
@@ -392,7 +446,7 @@ function DateInput({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-medium text-[#90AB8B]">
+      <label className="mb-2 block text-xs font-medium text-slate-400">
         {label}
       </label>
 
@@ -400,7 +454,7 @@ function DateInput({
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-4 py-3 text-sm text-[#EBF4DD] outline-none [color-scheme:dark] transition focus:border-[#90AB8B] focus:ring-2 focus:ring-[#90AB8B]/20"
+        className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-3 text-sm text-white outline-none [color-scheme:dark] transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
       />
     </div>
   );
@@ -411,7 +465,7 @@ function DateInput({
 ================================================== */
 function TableHead({ children }: { children: React.ReactNode }) {
   return (
-    <th className="whitespace-nowrap px-5 py-4 text-xs font-semibold uppercase tracking-wider text-[#90AB8B]">
+    <th className="whitespace-nowrap px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
       {children}
     </th>
   );
@@ -423,17 +477,11 @@ function TableHead({ children }: { children: React.ReactNode }) {
 function LevelCell({ value }: { value: number }) {
   return (
     <div className="flex min-w-[110px] items-center gap-3">
-      <span className="w-10 font-semibold text-[#EBF4DD]">{value}%</span>
+      <span className="w-10 font-semibold text-white">{value}%</span>
 
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[#202A30]">
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[#0a0d14]">
         <div
-          className={
-            value >= 90
-              ? "h-full rounded-full bg-red-400"
-              : value >= 75
-                ? "h-full rounded-full bg-yellow-300"
-                : "h-full rounded-full bg-[#90AB8B]"
-          }
+          className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-amber-400"
           style={{
             width: `${Math.min(Math.max(value, 0), 100)}%`,
           }}
@@ -453,25 +501,25 @@ function StatusBadge({ status }: { status: string }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
         ok
-          ? "bg-[#90AB8B]/10 text-[#90AB8B]"
+          ? "border-emerald-900 bg-emerald-950/60 text-emerald-400"
           : warning
-            ? "bg-yellow-300/10 text-yellow-300"
+            ? "border-amber-900 bg-amber-950/60 text-amber-400"
             : offline
-              ? "bg-gray-300/10 text-gray-300"
-              : "bg-red-400/10 text-red-300"
+              ? "border-slate-800 bg-slate-900/60 text-slate-400"
+              : "border-rose-900 bg-rose-950/60 text-rose-400"
       }`}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${
           ok
-            ? "bg-[#90AB8B]"
+            ? "bg-emerald-400"
             : warning
-              ? "bg-yellow-300"
+              ? "bg-amber-400"
               : offline
-                ? "bg-gray-300"
-                : "bg-red-300"
+                ? "bg-slate-400"
+                : "bg-rose-400"
         }`}
       />
       {status}
@@ -498,24 +546,24 @@ function Pagination({
   onNext: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between border-t border-[#5A7863]/20 p-4 sm:p-5">
+    <div className="flex items-center justify-between border-t border-[#212b3d] p-4 sm:p-5">
       <button
         onClick={onPrevious}
         disabled={!hasPrevious}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-4 py-2 text-sm text-[#EBF4DD] transition hover:border-[#90AB8B] hover:bg-[#5A7863]/30 disabled:cursor-not-allowed disabled:opacity-30"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-2 text-sm text-white transition hover:bg-[#1a2232] disabled:cursor-not-allowed disabled:opacity-30"
       >
         <ChevronLeft className="h-4 w-4" />
         <span>Previous</span>
       </button>
 
-      <span className="text-xs text-[#90AB8B] sm:text-sm">
+      <span className="text-xs text-slate-400 sm:text-sm">
         Page {page} / {totalPages}
       </span>
 
       <button
         onClick={onNext}
         disabled={!hasNext}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-[#5A7863]/40 bg-[#202A30] px-4 py-2 text-sm text-[#EBF4DD] transition hover:border-[#90AB8B] hover:bg-[#5A7863]/30 disabled:cursor-not-allowed disabled:opacity-30"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-2 text-sm text-white transition hover:bg-[#1a2232] disabled:cursor-not-allowed disabled:opacity-30"
       >
         <span>Next</span>
         <ChevronRight className="h-4 w-4" />
@@ -530,13 +578,13 @@ function Pagination({
 function EmptyHistory() {
   return (
     <div className="p-12 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#202A30] text-[#90AB8B]">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0a0d14] text-slate-400 border border-[#212b3d]">
         <FileX className="h-7 w-7" />
       </div>
 
-      <h3 className="mt-4 font-semibold text-[#EBF4DD]">No telemetry data</h3>
+      <h3 className="mt-4 font-semibold text-white">No telemetry data</h3>
 
-      <p className="mt-1 text-sm text-[#90AB8B]">
+      <p className="mt-1 text-sm text-slate-400">
         ยังไม่มีข้อมูล Telemetry สำหรับช่วงเวลาที่เลือก
       </p>
     </div>
@@ -551,7 +599,7 @@ function TableSkeleton() {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[900px] text-left">
         <thead>
-          <tr className="border-b border-[#5A7863]/30 bg-[#202A30]/50">
+          <tr className="border-b border-[#212b3d] bg-[#0a0d14]/60">
             <TableHead>Time</TableHead>
             <TableHead>Level</TableHead>
             <TableHead>Capacitive</TableHead>
@@ -561,32 +609,32 @@ function TableSkeleton() {
             <TableHead>Battery</TableHead>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-[#212b3d]">
           {Array.from({ length: 5 }).map((_, index) => (
-            <tr key={index} className="border-b border-[#5A7863]/20">
+            <tr key={index}>
               <td className="px-5 py-4">
-                <div className="h-4 w-32 animate-pulse rounded bg-[#202A30]" />
+                <div className="h-4 w-32 animate-pulse rounded bg-[#212b3d]" />
               </td>
               <td className="px-5 py-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-4 w-8 animate-pulse rounded bg-[#202A30]" />
-                  <div className="h-1.5 w-16 animate-pulse rounded-full bg-[#202A30]" />
+                  <div className="h-4 w-8 animate-pulse rounded bg-[#212b3d]" />
+                  <div className="h-1.5 w-16 animate-pulse rounded-full bg-[#212b3d]" />
                 </div>
               </td>
               <td className="px-5 py-4">
-                <div className="h-6 w-16 animate-pulse rounded-full bg-[#202A30]" />
+                <div className="h-6 w-16 animate-pulse rounded-full bg-[#212b3d]" />
               </td>
               <td className="px-5 py-4">
-                <div className="h-6 w-16 animate-pulse rounded-full bg-[#202A30]" />
+                <div className="h-6 w-16 animate-pulse rounded-full bg-[#212b3d]" />
               </td>
               <td className="px-5 py-4">
-                <div className="h-6 w-16 animate-pulse rounded-full bg-[#202A30]" />
+                <div className="h-6 w-16 animate-pulse rounded-full bg-[#212b3d]" />
               </td>
               <td className="px-5 py-4">
-                <div className="h-4 w-12 animate-pulse rounded bg-[#202A30]" />
+                <div className="h-4 w-12 animate-pulse rounded bg-[#212b3d]" />
               </td>
               <td className="px-5 py-4">
-                <div className="h-4 w-12 animate-pulse rounded bg-[#202A30]" />
+                <div className="h-4 w-12 animate-pulse rounded bg-[#212b3d]" />
               </td>
             </tr>
           ))}
@@ -601,16 +649,16 @@ function TableSkeleton() {
 ================================================== */
 function PageSkeleton() {
   return (
-    <main className="flex min-h-screen bg-[#202A30]">
+    <main className="flex min-h-screen bg-[#0a0d14]">
       <div className="hidden lg:block lg:w-64" />
       <div className="w-full p-4 pt-20 sm:p-6 sm:pt-20 lg:p-8">
         <div className="space-y-3">
-          <div className="h-3 w-20 animate-pulse rounded bg-[#3B4953]" />
-          <div className="h-8 w-48 animate-pulse rounded-lg bg-[#3B4953]" />
-          <div className="h-4 w-64 animate-pulse rounded bg-[#3B4953]" />
+          <div className="h-3 w-20 animate-pulse rounded bg-[#131822]" />
+          <div className="h-8 w-48 animate-pulse rounded-lg bg-[#131822]" />
+          <div className="h-4 w-64 animate-pulse rounded bg-[#131822]" />
         </div>
-        <div className="mt-6 h-40 animate-pulse rounded-2xl bg-[#3B4953]" />
-        <div className="mt-6 h-96 animate-pulse rounded-2xl bg-[#3B4953]" />
+        <div className="mt-6 h-40 animate-pulse rounded-2xl bg-[#131822] border border-[#212b3d]" />
+        <div className="mt-6 h-96 animate-pulse rounded-2xl bg-[#131822] border border-[#212b3d]" />
       </div>
     </main>
   );
