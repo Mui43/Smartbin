@@ -1,5 +1,7 @@
 "use client";
 
+import { Sun } from "lucide-react";
+
 interface TelemetryData {
   batteryPct: number;
   voltage: number;
@@ -10,17 +12,10 @@ export default function SolarBattery({
 }: {
   telemetry: TelemetryData;
 }) {
-  const battery = Math.min(
-    Math.max(telemetry.batteryPct, 0),
-    100
-  );
+  const battery = Math.min(Math.max(telemetry.batteryPct, 0), 100);
 
   const batteryStatus =
-    battery <= 20
-      ? "Low"
-      : battery <= 50
-        ? "Medium"
-        : "Good";
+    battery <= 20 ? "Low" : battery <= 50 ? "Medium" : "Good";
 
   const batteryColor =
     battery <= 20
@@ -51,8 +46,8 @@ export default function SolarBattery({
           </h2>
         </div>
 
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#5A7863] text-xl">
-          ☀️
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#5A7863] text-[#EBF4DD]">
+          <Sun size={22} className="shrink-0" />
         </div>
       </div>
 
@@ -60,9 +55,7 @@ export default function SolarBattery({
 
       <div className="mt-6 rounded-xl border border-[#5A7863]/40 bg-[#3B4953] p-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-[#90AB8B]">
-            Battery Level
-          </span>
+          <span className="text-sm text-[#90AB8B]">Battery Level</span>
 
           <span className={`font-semibold ${batteryColor}`}>
             {batteryStatus}
@@ -74,9 +67,7 @@ export default function SolarBattery({
             {battery}%
           </span>
 
-          <span className="text-sm text-[#90AB8B]">
-            Battery
-          </span>
+          <span className="text-sm text-[#90AB8B]">Battery</span>
         </div>
 
         <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#202A30]">
@@ -91,26 +82,18 @@ export default function SolarBattery({
 
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div className="rounded-xl border border-[#5A7863]/40 bg-[#3B4953] p-4">
-          <p className="text-xs text-[#90AB8B]">
-            Voltage
-          </p>
+          <p className="text-xs text-[#90AB8B]">Voltage</p>
 
           <p className="mt-2 text-xl font-bold text-[#EBF4DD]">
             {telemetry.voltage.toFixed(1)}
-            <span className="ml-1 text-sm font-normal text-[#90AB8B]">
-              V
-            </span>
+            <span className="ml-1 text-sm font-normal text-[#90AB8B]">V</span>
           </p>
         </div>
 
         <div className="rounded-xl border border-[#5A7863]/40 bg-[#3B4953] p-4">
-          <p className="text-xs text-[#90AB8B]">
-            Power Source
-          </p>
+          <p className="text-xs text-[#90AB8B]">Power Source</p>
 
-          <p className="mt-2 text-xl font-bold text-[#90AB8B]">
-            Solar
-          </p>
+          <p className="mt-2 text-xl font-bold text-[#90AB8B]">Solar</p>
         </div>
       </div>
     </div>

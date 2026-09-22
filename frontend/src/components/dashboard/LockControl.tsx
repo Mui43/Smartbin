@@ -2,16 +2,11 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
+import { Lock, Unlock } from "lucide-react";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:4000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-export default function LockControl({
-  binId,
-}: {
-  binId: string;
-}) {
+export default function LockControl({ binId }: { binId: string }) {
   const { data: session } = useSession();
 
   const [loading, setLoading] = useState(false);
@@ -19,8 +14,7 @@ export default function LockControl({
   const [error, setError] = useState("");
 
   const canControl =
-    session?.user?.role === "admin" ||
-    session?.user?.role === "staff";
+    session?.user?.role === "admin" || session?.user?.role === "staff";
 
   async function handleLock(action: "lock" | "unlock") {
     if (!session?.user?.accessToken) {
@@ -31,27 +25,21 @@ export default function LockControl({
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/bins/${binId}/lock`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.user.accessToken}`,
-          },
-          body: JSON.stringify({
-            action,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/api/bins/${binId}/lock`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.user.accessToken}`,
+        },
+        body: JSON.stringify({
+          action,
+        }),
+      });
 
       const result = await response.json();
 
       if (!response.ok) {
-        setError(
-          result?.error?.message ||
-            "ไม่สามารถควบคุม Lock ได้"
-        );
+        setError(result?.error?.message || "ไม่สามารถควบคุม Lock ได้");
         return;
       }
 
@@ -74,13 +62,15 @@ export default function LockControl({
             Security
           </p>
 
-          <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">
-            Bin Lock
-          </h2>
+          <h2 className="mt-1 text-xl font-bold text-[#EBF4DD]">Bin Lock</h2>
         </div>
 
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#5A7863] text-xl">
-          {locked ? "🔒" : "🔓"}
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#5A7863] text-[#EBF4DD]">
+          {locked ? (
+            <Lock size={20} className="shrink-0" />
+          ) : (
+            <Unlock size={20} className="shrink-0" />
+          )}
         </div>
       </div>
 
@@ -104,15 +94,15 @@ export default function LockControl({
               }
             `}
           >
-            <span className="text-2xl">
-              {locked ? "🔒" : "🔓"}
-            </span>
+            {locked ? (
+              <Lock size={28} className="shrink-0" />
+            ) : (
+              <Unlock size={28} className="shrink-0" />
+            )}
           </div>
 
           <div>
-            <p className="text-sm text-[#90AB8B]">
-              Current Status
-            </p>
+            <p className="text-sm text-[#90AB8B]">Current Status</p>
 
             <p className="mt-1 text-lg font-bold text-[#EBF4DD]">
               {locked ? "Locked" : "Unlocked"}
@@ -129,6 +119,10 @@ export default function LockControl({
             onClick={() => handleLock("lock")}
             disabled={loading || locked}
             className="
+              flex
+              items-center
+              justify-center
+              gap-2
               rounded-xl
               border
               border-[#5A7863]
@@ -143,13 +137,18 @@ export default function LockControl({
               disabled:opacity-40
             "
           >
-            🔒 Lock
+            <Lock size={18} className="shrink-0" />
+            <span>Lock</span>
           </button>
 
           <button
             onClick={() => handleLock("unlock")}
             disabled={loading || !locked}
             className="
+              flex
+              items-center
+              justify-center
+              gap-2
               rounded-xl
               bg-[#90AB8B]
               px-4
@@ -162,7 +161,8 @@ export default function LockControl({
               disabled:opacity-40
             "
           >
-            🔓 Unlock
+            <Unlock size={18} className="shrink-0" />
+            <span>Unlock</span>
           </button>
         </div>
       ) : (
