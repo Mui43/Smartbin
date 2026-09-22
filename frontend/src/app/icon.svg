@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    @keyframes pulse {
+      0%, 100% { fill: #10B981; } /* เขียว */
+      50% { fill: #3B82F6; }      /* ฟ้า */
+    }
+    .status-dot { animation: pulse 2s infinite; }
+  </style>
+  <!-- ตัวถังขยะ -->
+  <path d="M8 10h16v16a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10z" fill="#2C2E3A"/>
+  <path d="M6 8h20v2H6z" fill="#050A44"/>
+  <!-- จุดไฟสถานะที่กะพริบเปลี่ยนสีได้ -->
+  <circle class="status-dot" cx="16" cy="18" r="3" />
+</svg>

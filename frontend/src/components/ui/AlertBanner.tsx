@@ -1,5 +1,7 @@
 "use client";
 
+import { CheckCircle2, AlertTriangle, Bell } from "lucide-react";
+
 interface AlertData {
   _id?: string;
   binId: string;
@@ -10,11 +12,7 @@ interface AlertData {
   message: string;
 }
 
-export default function AlertBanner({
-  alerts,
-}: {
-  alerts: AlertData[];
-}) {
+export default function AlertBanner({ alerts }: { alerts: AlertData[] }) {
   if (!alerts || alerts.length === 0) {
     return (
       <div
@@ -32,24 +30,20 @@ export default function AlertBanner({
         "
       >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#235347]">
-          <span className="text-lg">✓</span>
+          <CheckCircle2 size={20} className="text-[#DAF1DE] shrink-0" />
         </div>
 
         <div>
-          <p className="font-semibold text-[#DAF1DE]">
-            All systems normal
-          </p>
+          <p className="font-semibold text-[#DAF1DE]">All systems normal</p>
 
-          <p className="text-sm text-[#8EB69B]">
-            No active alerts
-          </p>
+          <p className="text-sm text-[#8EB69B]">No active alerts</p>
         </div>
       </div>
     );
   }
 
   const criticalCount = alerts.filter(
-    (alert) => alert.level === "critical"
+    (alert) => alert.level === "critical",
   ).length;
 
   const hasCritical = criticalCount > 0;
@@ -80,16 +74,14 @@ export default function AlertBanner({
             items-center
             justify-center
             rounded-xl
-            ${
-              hasCritical
-                ? "bg-red-400/20"
-                : "bg-yellow-300/20"
-            }
+            ${hasCritical ? "bg-red-400/20" : "bg-yellow-300/20"}
           `}
         >
-          <span className="text-lg">
-            {hasCritical ? "⚠️" : "🔔"}
-          </span>
+          {hasCritical ? (
+            <AlertTriangle size={20} className="text-red-300 shrink-0" />
+          ) : (
+            <Bell size={20} className="text-yellow-200 shrink-0" />
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -98,11 +90,7 @@ export default function AlertBanner({
               <p
                 className={`
                   font-semibold
-                  ${
-                    hasCritical
-                      ? "text-red-300"
-                      : "text-yellow-200"
-                  }
+                  ${hasCritical ? "text-red-300" : "text-yellow-200"}
                 `}
               >
                 {alerts.length} Active Alert
@@ -133,9 +121,7 @@ export default function AlertBanner({
                 "
               >
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-medium text-[#DAF1DE]">
-                    {alert.message}
-                  </p>
+                  <p className="font-medium text-[#DAF1DE]">{alert.message}</p>
 
                   <span
                     className={`
@@ -159,9 +145,7 @@ export default function AlertBanner({
 
                 <p className="mt-1 text-xs text-[#8EB69B]">
                   Bin: {alert.binId}
-                  {alert.location
-                    ? ` • ${alert.location}`
-                    : ""}
+                  {alert.location ? ` • ${alert.location}` : ""}
                 </p>
               </div>
             ))}

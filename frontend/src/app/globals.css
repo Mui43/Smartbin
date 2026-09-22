@@ -1,11 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #202A30;
-  --card: #3B4953;
-  --accent: #5A7863;
-  --secondary: #90AB8B;
-  --text: #EBF4DD;
+  /* เดิม */
+  --bg: #202a30;
+  --card: #3b4953;
+  --accent: #5a7863;
+  --secondary: #90ab8b;
+  --text: #ebf4dd;
+
+  /* เพิ่มใหม่ */
+  --card-raised: #445561; /* progress track, input bg, ให้ลึกกว่า card อีกขั้น */
+  --border: #4c5c67; /* เส้นขอบการ์ดปกติ */
+  --border-strong: #5d717d; /* เส้นขอบ hover/focus */
+
+  --text-secondary: #b9c9af; /* label, ข้อความรอง (โทนเขียวอ่อนลงจาก secondary) */
+  --text-muted: #7c8d85; /* placeholder, timestamp */
+
+  --accent-hover: #4c6853; /* accent ตอน hover/active */
+  --accent-bg: rgba(90, 120, 99, 0.18); /* พื้นหลังอ่อนของ badge สถานะ online */
+
+  --warning: #c9a24a; /* ใกล้ threshold */
+  --warning-bg: rgba(201, 162, 74, 0.15);
+  --danger: #c1584f; /* offline, delete, error */
+  --danger-bg: rgba(193, 88, 79, 0.15);
 }
 
 * {

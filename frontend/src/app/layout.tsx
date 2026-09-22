@@ -4,8 +4,12 @@ import AuthProvider from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
   title: "Smart Bin Dashboard",
-  description:
-    "Solar-Powered Recycling Waste Sorting System",
+  description: "Solar-Powered Recycling Waste Sorting System",
+ icons: {
+  icon: [
+    { url: '/icon.svg', type: 'image/svg+xml' }
+  ]
+}
 };
 
 export default function RootLayout({
@@ -16,9 +20,7 @@ export default function RootLayout({
   return (
     <html lang="th">
       <body>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
