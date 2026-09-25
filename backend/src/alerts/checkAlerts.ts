@@ -3,11 +3,11 @@ import { Bin } from "../models/bin.js";
 
 export interface BinAlert {
   type:
-    | "FULL"
-    | "NEAR_FULL"
-    | "SENSOR_ERROR"
-    | "LOW_BATTERY"
-    | "OFFLINE";
+  | "FULL"
+  | "NEAR_FULL"
+  | "SENSOR_ERROR"
+  | "LOW_BATTERY"
+  | "OFFLINE";
 
   level: "warning" | "critical";
 
@@ -40,6 +40,14 @@ export async function checkBinAlerts(
 
     return alerts;
   }
+
+  console.log("🔍 ALERT CHECK:", {
+    binId,
+    level: telemetry.level,
+    thresholdPct: bin.thresholdPct,
+    batteryPct: telemetry.batteryPct,
+    timestamp: telemetry.timestamp,
+  });
 
   // =========================
   // FULL / NEAR FULL

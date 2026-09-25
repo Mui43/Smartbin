@@ -1,37 +1,78 @@
-import { Router, Request, Response } from "express";
+import {
+  Router,
+  Request,
+  Response,
+} from "express";
 
 const router = Router();
 
 const clients = new Set<Response>();
 
-router.get("/", (req: Request, res: Response) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
+router.get(
+  "/",
+  (req: Request, res: Response) => {
+    res.setHeader(
+      "Content-Type",
+      "text/event-stream"
+    );
 
-  res.flushHeaders();
+    res.setHeader(
+      "Cache-Control",
+      "no-cache, no-transform"
+    );
 
-  clients.add(res);
+    res.setHeader(
+      "Connection",
+      "keep-alive"
+    );
 
-  console.log(`🔌 SSE client connected (${clients.size})`);
+    res.flushHeaders();
 
-  res.write(`event: connected\n`);
-  res.write(`data: ${JSON.stringify({ connected: true })}\n\n`);
+    clients.add(res);
 
-  req.on("close", () => {
-    clients.delete(res);
+    console.log(
+      `🔌 SSE client connected (${clients.size})`
+    );
 
-    console.log(`🔌 SSE client disconnected (${clients.size})`);
-  });
-});
+    res.write(
+      `event: connected\n`
+    );
 
-export function broadcastRealtime(data: unknown) {
+    res.write(
+      `data: ${JSON.stringify({
+        connected: true,
+      })}\n\n`
+    );
+
+    req.on("close", () => {
+      clients.delete(res);
+
+      console.log(
+        `🔌 SSE client disconnected (${clients.size})`
+      );
+    });
+  }
+);
+
+export function broadcastRealtime(
+  data: unknown,
+  event = "telemetry"
+) {
   const message =
-    `event: telemetry\n` +
+    `event: ${event}\n` +
     `data: ${JSON.stringify(data)}\n\n`;
 
   for (const client of clients) {
-    client.write(message);
+    try {
+      client.write(message);
+    } catch (error) {
+      clients.delete(client);
+
+      console.error(
+        "❌ SSE client write error:",
+        error
+      );
+    }
   }
 }
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   Wifi,
   WifiOff,
@@ -10,7 +12,7 @@ import {
   Cpu,
 } from "lucide-react";
 
-import { useTelemetry } from "@/hooks/useTelemetry";
+import { useTelemetry, type TelemetryData } from "@/hooks/useTelemetry";
 import { useAlerts } from "@/hooks/useAlerts";
 
 import BinOverview from "@/components/dashboard/BinOverview";
@@ -23,10 +25,80 @@ import AlertBanner from "@/components/ui/AlertBanner";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 
+interface DashboardBin {
+  binId: string;
+  name: string;
+  location: string;
+  level: number | null;
+  batteryPct: number | null;
+  voltage: number | null;
+  sensorStatus: TelemetryData["sensorStatus"] | null;
+  lastSeen: string | null;
+}
+
 export default function Home() {
-  // ดึงข้อมูลจริงจาก Backend ผ่าน Custom Hooks
-  const { telemetry, connected } = useTelemetry();
+  const { data: session } = useSession();
+  const { telemetryByBin, connected } = useTelemetry();
   const { alerts } = useAlerts();
+  const [bins, setBins] = useState<DashboardBin[]>([]);
+  const [selectedBinId, setSelectedBinId] = useState<string | null>(null);
+  const [binsLoading, setBinsLoading] = useState(true);
+  const [binsError, setBinsError] = useState("");
+
+  useEffect(() => {
+    const token = session?.user?.accessToken;
+    if (!token) return;
+
+    const controller = new AbortController();
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+    async function loadBins() {
+      try {
+        setBinsLoading(true);
+        const response = await fetch(`${apiUrl}/api/bins`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = await response.json();
+        if (!response.ok || !Array.isArray(result.data)) {
+          throw new Error(result?.error?.message || "ไม่สามารถโหลดรายการถังได้");
+        }
+        setBins(result.data);
+        setBinsError("");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setBinsError(error instanceof Error ? error.message : "ไม่สามารถโหลดรายการถังได้");
+      } finally {
+        if (!controller.signal.aborted) setBinsLoading(false);
+      }
+    }
+
+    loadBins();
+    return () => controller.abort();
+  }, [session?.user?.accessToken]);
+
+  const activeBinId = bins.some((bin) => bin.binId === selectedBinId)
+    ? selectedBinId
+    : bins[0]?.binId;
+  const activeBin = bins.find((bin) => bin.binId === activeBinId);
+  const telemetry = activeBinId ? telemetryByBin[activeBinId] : undefined;
+  const snapshot: TelemetryData | null = activeBin?.lastSeen
+    ? {
+        binId: activeBin.binId,
+        level: activeBin.level ?? 0,
+        batteryPct: activeBin.batteryPct ?? 0,
+        voltage: activeBin.voltage ?? 0,
+        sensorStatus: activeBin.sensorStatus ?? {
+          capacitive: "offline",
+          inductive: "offline",
+          level: "offline",
+        },
+        timestamp: activeBin.lastSeen,
+      }
+    : null;
+  const activeTelemetry = telemetry ?? snapshot;
+  const activeAlerts = alerts.filter((alert) => alert.binId === activeBinId);
 
   return (
     <main className="min-h-screen bg-[#0a0d14] text-white">
@@ -86,19 +158,68 @@ export default function Home() {
           </div>
         </div>
 
+        <section className="mb-6" aria-label="เลือกถังขยะ">
+          <div className="mb-3">
+            <h2 className="text-lg font-bold text-white">เลือกถังขยะ</h2>
+            <p className="text-sm text-slate-400">เลือกถังเพื่อดูข้อมูลของถังนั้น</p>
+          </div>
+          {binsError && <p className="mb-3 text-sm text-rose-400">{binsError}</p>}
+          {binsLoading ? (
+            <p className="text-sm text-slate-400">กำลังโหลดรายการถัง...</p>
+          ) : bins.length === 0 ? (
+            <p className="rounded-xl border border-[#212b3d] bg-[#131822] p-5 text-sm text-slate-400">
+              ยังไม่มีถังขยะในระบบ
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {bins.map((bin) => {
+                const latest = telemetryByBin[bin.binId];
+                const level = latest?.level ?? bin.level;
+                const selected = bin.binId === activeBinId;
+                return (
+                  <button
+                    key={bin.binId}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setSelectedBinId(bin.binId)}
+                    className={`rounded-2xl border p-4 text-left transition hover:border-emerald-500/60 ${
+                      selected
+                        ? "border-emerald-500 bg-emerald-500/10"
+                        : "border-[#212b3d] bg-[#131822]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-white">{bin.name}</p>
+                        <p className="mt-1 text-xs text-slate-400">{bin.binId}</p>
+                      </div>
+                      <span className="text-sm font-semibold text-emerald-400">
+                        {level == null ? "ไม่มีข้อมูล" : `${level}%`}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-xs text-slate-400">{bin.location}</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         {/* =========================
             Alert Banner
         ========================= */}
-        {alerts && alerts.length > 0 && (
+        {activeAlerts.length > 0 && (
           <div className="mb-6">
-            <AlertBanner alerts={alerts} />
+            <AlertBanner alerts={activeAlerts} />
           </div>
         )}
 
         {/* =========================
             Waiting State / Main Content
         ========================= */}
-        {!telemetry ? (
+        {!activeBinId ? null : (
+          <>
+        {!activeTelemetry ? (
           <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-[#212b3d] bg-[#131822] p-6 shadow-2xl">
             <div className="flex flex-col items-center justify-center text-center">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#212b3d] bg-[#0a0d14] text-emerald-400 shadow-inner">
@@ -113,7 +234,7 @@ export default function Home() {
               </p>
 
               <p className="mt-1 text-sm text-slate-400">
-                Waiting for data from Smart Bin
+                Waiting for data from {activeBin?.name || activeBinId}
               </p>
             </div>
           </div>
@@ -121,21 +242,24 @@ export default function Home() {
           <>
             {/* Overview */}
             <section>
-              <BinOverview telemetry={telemetry} />
+              <BinOverview telemetry={activeTelemetry} />
             </section>
+          </>
+        )}
 
             {/* Waste Chart */}
             <section className="mt-6">
-              <WasteChart />
+              <WasteChart key={activeBinId} binId={activeBinId} />
             </section>
 
             {/* Solar + Lock Control */}
             <section className="mt-6 grid gap-6 lg:grid-cols-2">
-              <SolarBattery telemetry={telemetry} />
-              <LockControl binId={telemetry.binId} />
+              {activeTelemetry && <SolarBattery telemetry={activeTelemetry} />}
+              <LockControl key={activeBinId} binId={activeBinId} />
             </section>
 
             {/* Sensor Status */}
+            {activeTelemetry && (
             <section className="mt-6 rounded-2xl border border-[#212b3d] bg-[#131822] p-5 shadow-xl sm:p-6">
               <div className="mb-5 flex items-center justify-between">
                 <div>
@@ -156,24 +280,25 @@ export default function Home() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Sensor
                   name="Capacitive"
-                  status={telemetry.sensorStatus?.capacitive || "offline"}
+                  status={activeTelemetry.sensorStatus?.capacitive || "offline"}
                 />
 
                 <Sensor
                   name="Inductive"
-                  status={telemetry.sensorStatus?.inductive || "offline"}
+                  status={activeTelemetry.sensorStatus?.inductive || "offline"}
                 />
 
                 <Sensor
                   name="Level"
-                  status={telemetry.sensorStatus?.level || "offline"}
+                  status={activeTelemetry.sensorStatus?.level || "offline"}
                 />
               </div>
             </section>
+            )}
 
             {/* Telemetry Table */}
             <section className="mt-6">
-              <TelemetryTable binId={telemetry.binId} />
+              <TelemetryTable key={activeBinId} binId={activeBinId} />
             </section>
           </>
         )}

@@ -48,7 +48,7 @@ export default function Header() {
             sm:text-3xl
           "
         >
-          Smart Bin Monitoring
+          Monitoring
         </h1>
 
         <p className="mt-1 text-sm text-[#90AB8B]">

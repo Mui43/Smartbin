@@ -2,28 +2,29 @@ import { Alert } from "../models/alert.js";
 import { sendLineMessage } from "../services/line.js";
 import { checkBinAlerts } from "./checkAlerts.js";
 
-export async function notifyBinAlerts(
-  binId: string
-) {
+export async function notifyBinAlerts(binId: string) {
   try {
-    const currentAlerts =
-      await checkBinAlerts(binId);
+    console.log(`🔎 Checking alerts for ${binId}`);
 
-    /*
-     * 1. ตรวจ Alert ที่เคย Active
-     * แต่ตอนนี้ไม่เกิดขึ้นแล้ว
-     */
+    const currentAlerts = await checkBinAlerts(binId);
+
+    console.log(
+      `🚨 Current alerts: ${currentAlerts.length}`
+    );
+
+    // ==========================================
+    // 1. Resolve alerts ที่ไม่เกิดขึ้นแล้ว
+    // ==========================================
+
     const activeAlerts = await Alert.find({
       binId,
       active: true,
     });
 
     for (const oldAlert of activeAlerts) {
-      const stillExists =
-        currentAlerts.some(
-          (alert) =>
-            alert.type === oldAlert.type
-        );
+      const stillExists = currentAlerts.some(
+        (alert) => alert.type === oldAlert.type
+      );
 
       if (!stillExists) {
         oldAlert.active = false;
@@ -37,28 +38,34 @@ export async function notifyBinAlerts(
       }
     }
 
-    /*
-     * 2. ตรวจ Alert ปัจจุบัน
-     */
-    for (const alert of currentAlerts) {
-      const existingAlert =
-        await Alert.findOne({
-          binId,
-          type: alert.type,
-          active: true,
-        });
+    // ==========================================
+    // 2. ตรวจ Alert ปัจจุบัน
+    // ==========================================
 
-      /*
-       * มี Alert เดิมอยู่แล้ว
-       * ไม่ต้องส่ง LINE ซ้ำ
-       */
+    for (const alert of currentAlerts) {
+      console.log(
+        `🚨 Alert detected: ${binId} ${alert.type}`
+      );
+
+      const existingAlert = await Alert.findOne({
+        binId,
+        type: alert.type,
+        active: true,
+      });
+
+      // มี Alert เดิมอยู่แล้ว
       if (existingAlert) {
+        console.log(
+          `ℹ️ Alert already active: ${binId} ${alert.type}`
+        );
+
         continue;
       }
 
-      /*
-       * 3. สร้าง Alert ใหม่ใน MongoDB
-       */
+      // ==========================================
+      // 3. สร้าง Alert ใน MongoDB
+      // ==========================================
+
       const newAlert = await Alert.create({
         binId,
         type: alert.type,
@@ -68,9 +75,14 @@ export async function notifyBinAlerts(
         sentToLine: false,
       });
 
-      /*
-       * 4. ส่ง LINE
-       */
+      console.log(
+        `💾 Alert created: ${binId} ${alert.type}`
+      );
+
+      // ==========================================
+      // 4. ส่ง LINE
+      // ==========================================
+
       try {
         const message =
           `🤖 Smart Bin Alert\n\n` +
@@ -82,6 +94,8 @@ export async function notifyBinAlerts(
               : "แจ้งเตือน"
           }\n\n` +
           `กรุณาตรวจสอบถัง`;
+
+        console.log("📤 Sending LINE message...");
 
         await sendLineMessage(message);
 

@@ -3,7 +3,7 @@ import mqtt from "mqtt";
 const client = mqtt.connect("mqtt://localhost:1883");
 
 const payload = {
-  level: 70,
+  level: 97,
   sensorStatus: {
     capacitive: "ok",
     inductive: "ok",
