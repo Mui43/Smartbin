@@ -16,13 +16,13 @@ export interface TelemetryData {
 }
 
 export function useTelemetry() {
-  const [telemetry, setTelemetry] =
-    useState<TelemetryData | null>(null);
+  const [telemetryByBin, setTelemetryByBin] =
+    useState<Record<string, TelemetryData>>({});
 
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const apiUrl = "http://localhost:4000";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
     const eventSource = new EventSource(
       `${apiUrl}/api/realtime`
@@ -36,7 +36,11 @@ export function useTelemetry() {
       try {
         const data = JSON.parse(event.data);
 
-        setTelemetry(data);
+        if (typeof data.binId !== "string") return;
+        setTelemetryByBin((current) => ({
+          ...current,
+          [data.binId]: data,
+        }));
         setConnected(true);
       } catch (error) {
         console.error(
@@ -56,7 +60,7 @@ export function useTelemetry() {
   }, []);
 
   return {
-    telemetry,
+    telemetryByBin,
     connected,
   };
 }

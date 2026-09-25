@@ -49,8 +49,12 @@ export function useAlerts() {
     }
 
     try {
+      const API_URL =
+        process.env.NEXT_PUBLIC_API_URL ||
+        "http://localhost:4000";
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/alerts`,
+        `${API_URL}/api/alerts`,
         {
           method: "GET",
           headers: {
