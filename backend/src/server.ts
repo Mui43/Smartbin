@@ -19,6 +19,7 @@ import exportRouter from "./routes/export.js";
 import dashboardRouter from "./routes/dashboard.js";
 import deviceRouter from "./routes/device.js";
 import wasteStatsRouter from "./routes/wasteStats.js";
+import deviceHeartbeatRouter from "./routes/deviceHeartbeat.js";
 
 import { startMqtt } from "./mqtt/client.js";
 
@@ -113,6 +114,11 @@ app.use(
 app.use(
   "/api/device",
   deviceRouter
+);
+
+app.use(
+  "/api/device/heartbeat",
+  deviceHeartbeatRouter
 );
 
 // ==================================

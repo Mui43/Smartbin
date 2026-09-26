@@ -1,7 +1,10 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 
 import { Device } from "../models/device.js";
 import { Bin } from "../models/bin.js";
+import { authenticate } from "../middleware/auth.js";
+import { broadcastRealtime } from "./realtime.js";
 
 const router = Router();
 
@@ -16,6 +19,99 @@ function isAdmin(req: AuthRequest) {
   return req.user?.role === "admin";
 }
 
+function hasDeviceKey(req: Request) {
+  const expected = process.env.DEVICE_API_KEY;
+  const supplied = req.header("x-api-key");
+  if (!expected || !supplied) return false;
+  const expectedBytes = Buffer.from(expected);
+  const suppliedBytes = Buffer.from(supplied);
+  return expectedBytes.length === suppliedBytes.length &&
+    crypto.timingSafeEqual(expectedBytes, suppliedBytes);
+}
+
+function broadcastDevice(device: {
+  binId: string;
+  deviceId: string;
+  name: string;
+  status: string;
+  lastSeen?: Date;
+  state?: string;
+}) {
+  broadcastRealtime({
+    type: "device",
+    binId: device.binId,
+    deviceId: device.deviceId,
+    name: device.name,
+    status: device.status,
+    lastSeen: device.lastSeen ?? null,
+    state: device.state ?? "unknown",
+  }, "device");
+}
+
+function isRegistered(device: { binId?: string; name?: string; type?: string }) {
+  return Boolean(device.binId && device.name && device.type);
+}
+
+// ESP32 polls every few seconds; each successful poll is a heartbeat.
+router.get("/poll", async (req, res) => {
+  if (!hasDeviceKey(req)) {
+    return res.status(401).json({ success: false, error: { message: "Invalid device API key" } });
+  }
+
+  const deviceId = String(req.query.deviceId || "").trim();
+  if (!deviceId) {
+    return res.status(400).json({ success: false, error: { message: "deviceId is required" } });
+  }
+
+  try {
+    const device = await Device.findOne({ deviceId });
+    if (!device || !isRegistered(device)) {
+      return res.status(404).json({ success: false, error: { message: "Device not registered" } });
+    }
+
+    device.status = "online";
+    device.lastSeen = new Date();
+    await device.save();
+    broadcastDevice(device);
+
+    return res.json({ success: true, command: device.pendingCommand ?? null });
+  } catch (error) {
+    console.error("Device poll error:", error);
+    return res.status(500).json({ success: false, error: { message: "Device poll failed" } });
+  }
+});
+
+router.post("/report", async (req, res) => {
+  if (!hasDeviceKey(req)) {
+    return res.status(401).json({ success: false, error: { message: "Invalid device API key" } });
+  }
+
+  const deviceId = String(req.body?.deviceId || "").trim();
+  const state = req.body?.state;
+  if (!deviceId || (state !== "on" && state !== "off")) {
+    return res.status(400).json({ success: false, error: { message: "Valid deviceId and state are required" } });
+  }
+
+  try {
+    const device = await Device.findOne({ deviceId });
+    if (!device || !isRegistered(device)) {
+      return res.status(404).json({ success: false, error: { message: "Device not registered" } });
+    }
+
+    device.state = state;
+    device.status = "online";
+    device.lastSeen = new Date();
+    if (device.pendingCommand === state) device.pendingCommand = null;
+    await device.save();
+    broadcastDevice(device);
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Device report error:", error);
+    return res.status(500).json({ success: false, error: { message: "Device report failed" } });
+  }
+});
+
 // ==================================
 // GET /api/device
 // Get all devices
@@ -26,7 +122,7 @@ router.get(
   async (_req: Request, res: Response) => {
     try {
       const devices =
-        await Device.find()
+        await Device.find({ binId: { $exists: true, $ne: "" }, name: { $exists: true }, type: { $exists: true } })
           .sort({
             binId: 1,
             name: 1,
@@ -142,7 +238,7 @@ router.get(
           deviceId,
         }).lean();
 
-      if (!device) {
+      if (!device || !isRegistered(device)) {
         return res.status(404).json({
           success: false,
           error: {
@@ -197,6 +293,7 @@ router.get(
 
 router.post(
   "/",
+  authenticate,
   async (
     req: AuthRequest,
     res: Response
@@ -259,7 +356,7 @@ router.post(
           deviceId,
         });
 
-      if (exists) {
+      if (exists && isRegistered(exists)) {
         return res.status(409).json({
           success: false,
           error: {
@@ -270,17 +367,14 @@ router.post(
         });
       }
 
-      const device =
-        await Device.create({
-          deviceId,
-          binId,
-          name,
-          type,
-          description,
-          metadata:
-            metadata ?? {},
-          status: "offline",
-        });
+      const device = exists ?? new Device({ deviceId });
+      device.binId = binId;
+      device.name = name;
+      device.type = type;
+      device.description = description;
+      device.metadata = metadata ?? {};
+      device.status = "offline";
+      await device.save();
 
       return res.status(201).json({
         success: true,
@@ -311,6 +405,7 @@ router.post(
 
 router.put(
   "/:deviceId",
+  authenticate,
   async (
     req: AuthRequest,
     res: Response
@@ -426,6 +521,7 @@ router.put(
 
 router.delete(
   "/:deviceId",
+  authenticate,
   async (
     req: AuthRequest,
     res: Response

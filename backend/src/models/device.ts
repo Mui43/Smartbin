@@ -23,6 +23,8 @@ export interface IDevice extends Document {
   description?: string;
   status: DeviceStatus;
   lastSeen?: Date;
+  state?: "on" | "off" | "unknown";
+  pendingCommand?: "on" | "off" | null;
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -83,6 +85,18 @@ const deviceSchema = new Schema<IDevice>(
 
     lastSeen: {
       type: Date,
+    },
+
+    state: {
+      type: String,
+      enum: ["on", "off", "unknown"],
+      default: "unknown",
+    },
+
+    pendingCommand: {
+      type: String,
+      enum: ["on", "off"],
+      default: null,
     },
 
     metadata: {
