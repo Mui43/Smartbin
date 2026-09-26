@@ -179,6 +179,34 @@ export default function BinDevicesPage() {
     };
   }, [status, loadDevices]);
 
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    const eventSource = new EventSource(`${API_URL}/api/realtime`);
+    let connectedOnce = false;
+
+    eventSource.addEventListener("connected", () => {
+      if (connectedOnce) loadDevices();
+      connectedOnce = true;
+    });
+
+    eventSource.addEventListener("device", (event) => {
+      try {
+        const update = JSON.parse(event.data);
+        if (update.binId !== binId) return;
+        setDevices((current) => current.map((device) =>
+          device.deviceId === update.deviceId
+            ? { ...device, status: update.status, lastSeen: update.lastSeen }
+            : device,
+        ));
+      } catch (error) {
+        console.error("Device event parse error:", error);
+      }
+    });
+
+    return () => eventSource.close();
+  }, [status, binId, loadDevices]);
+
   // =========================================================
   // Summary
   // =========================================================

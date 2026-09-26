@@ -130,6 +130,33 @@ export default function DevicesPage() {
     };
   }, [status, loadData]);
 
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    const eventSource = new EventSource(`${API_URL}/api/realtime`);
+    let connectedOnce = false;
+
+    eventSource.addEventListener("connected", () => {
+      if (connectedOnce) loadData();
+      connectedOnce = true;
+    });
+
+    eventSource.addEventListener("device", (event) => {
+      try {
+        const update = JSON.parse(event.data);
+        setDevices((current) => current.map((device) =>
+          device.deviceId === update.deviceId && device.binId === update.binId
+            ? { ...device, status: update.status, lastSeen: update.lastSeen }
+            : device,
+        ));
+      } catch (error) {
+        console.error("Device event parse error:", error);
+      }
+    });
+
+    return () => eventSource.close();
+  }, [status, loadData]);
+
   const deviceStats = useMemo(() => {
     const stats = new Map<
       string,

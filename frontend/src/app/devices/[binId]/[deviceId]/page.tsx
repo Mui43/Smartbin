@@ -53,6 +53,7 @@ interface Device {
   type: DeviceType;
   description?: string;
   status: DeviceStatus;
+  state?: "on" | "off" | "unknown";
   lastSeen?: string;
   metadata?: Record<
     string,
@@ -331,6 +332,7 @@ export default function DeviceDetailPage() {
                 lastSeen:
                   data.lastSeen ??
                   current.lastSeen,
+                state: data.state ?? current.state,
               };
             }
           );
@@ -554,6 +556,17 @@ export default function DeviceDetailPage() {
             </p>
           </div>
 
+          {device.type === "ESP32" && (
+            <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <h2 className="mb-4 font-semibold text-gray-900 dark:text-white">
+                สถานะรีเลย์
+              </h2>
+              <p className="font-medium text-gray-900 dark:text-white">
+                {device.state === "on" ? "เปิด" : device.state === "off" ? "ปิด" : "ยังไม่มีข้อมูล"}
+              </p>
+            </div>
+          )}
+
           {/* Last Seen */}
 
           <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -635,6 +648,17 @@ export default function DeviceDetailPage() {
             </p>
           </div>
         </div>
+
+        {device.type === "ESP32" && (
+          <div className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5 text-sm text-slate-300">
+            <p className="font-semibold text-white">การเชื่อมต่อ ESP32</p>
+            <p className="mt-2">
+              ตั้ง Device ID ในเฟิร์มแวร์เป็น <code>{device.deviceId}</code> และตั้ง Wi-Fi,
+              ที่อยู่ backend กับ DEVICE_API_KEY ให้ตรงกัน สถานะ Online หมายถึง backend
+              ได้รับ heartbeat จากบอร์ดล่าสุด และระบบตรวจออฟไลน์ทุก 30 วินาที
+            </p>
+          </div>
+        )}
 
         {/* Metadata */}
 

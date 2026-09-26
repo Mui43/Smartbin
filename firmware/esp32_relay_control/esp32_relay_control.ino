@@ -6,9 +6,11 @@
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 
-// URL ของ Backend (เช่น https://your-domain.vercel.app หรือ IP เครื่อง Dev)
-const char* serverUrl = "https://your-domain.com";
-const char* apiKey = "my-super-secret-key";
+// ใช้ IP ของเครื่องที่รัน backend ในวง LAN เดียวกัน ห้ามใช้ localhost บน ESP32
+const char* serverUrl = "http://192.168.1.100:4000";
+// ต้องตรงกับ DEVICE_API_KEY ที่ตั้งค่าให้ backend
+const char* apiKey = "YOUR_DEVICE_API_KEY";
+// ต้องตรงกับ Device ID ที่ลงทะเบียนในหน้า Devices
 const char* deviceId = "esp32-01";
 
 // --- ตั้งค่า Hardware ---
@@ -23,12 +25,14 @@ void setup() {
 
   // เชื่อมต่อ WiFi
   WiFi.begin(ssid, password);
+  WiFi.setAutoReconnect(true);
   Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.println("\nWiFi Connected!");
+  reportStatus("off");
 }
 
 void loop() {
@@ -36,6 +40,8 @@ void loop() {
     lastPollTime = millis();
     if (WiFi.status() == WL_CONNECTED) {
       checkCommand();
+    } else {
+      WiFi.reconnect();
     }
   }
 }
