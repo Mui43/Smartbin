@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { Lock, Unlock, Loader2 } from "lucide-react";
 
@@ -10,7 +10,33 @@ export default function LockControl({ binId }: { binId: string }) {
   const { data: session } = useSession();
 
   const [loading, setLoading] = useState(false);
-  const [locked, setLocked] = useState(false);
+  const [locked, setLocked] = useState<boolean | null>(null);
+  const [pending, setPending] = useState(false);
+  const [online, setOnline] = useState(false);
+  const waitingSince = useRef<number | null>(null);
+  const accessToken = session?.user?.accessToken;
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let active = true;
+    const controller = new AbortController();
+    async function refresh() {
+      try {
+        const response = await fetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/lock`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: controller.signal });
+        const result = await response.json();
+        if (!active) return;
+        if (!response.ok || !result.success) { setOnline(false); setError(result?.error?.message || "ไม่สามารถโหลดสถานะล็อกได้"); return; }
+        setLocked(result.data.state === "on" ? true : result.data.state === "off" ? false : null);
+        setOnline(result.data.online);
+        setPending(Boolean(result.data.pendingCommand));
+        if (!result.data.pendingCommand) waitingSince.current = null;
+        if (waitingSince.current && Date.now() - waitingSince.current > 30000) setError("ยังไม่ได้รับการยืนยันจาก ESP32 กรุณาตรวจการเชื่อมต่อและเฟิร์มแวร์");
+      } catch { if (active) { setOnline(false); setError("ไม่สามารถโหลดสถานะจาก Backend ได้"); } }
+    }
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 2000);
+    return () => { active = false; controller.abort(); clearInterval(timer); };
+  }, [binId, accessToken]);
   const [error, setError] = useState("");
 
   const canControl =
@@ -38,12 +64,13 @@ export default function LockControl({ binId }: { binId: string }) {
 
       const result = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || !result.success) {
         setError(result?.error?.message || "ไม่สามารถควบคุม Lock ได้");
         return;
       }
 
-      setLocked(action === "lock");
+      setPending(true);
+      waitingSince.current = Date.now();
     } catch (err) {
       console.error("Lock control error:", err);
       setError("ไม่สามารถเชื่อมต่อ Backend ได้");
@@ -107,7 +134,7 @@ export default function LockControl({ binId }: { binId: string }) {
             <p
               className={`mt-1 text-lg font-bold ${locked ? "text-emerald-400" : "text-slate-200"}`}
             >
-              {locked ? "Locked" : "Unlocked"}
+              {pending ? "รอ ESP32 ยืนยัน" : locked === null ? "ยังไม่มีสถานะ" : locked ? "Locked" : "Unlocked"}
             </p>
           </div>
         </div>
@@ -118,7 +145,7 @@ export default function LockControl({ binId }: { binId: string }) {
         <div className="mt-5 grid grid-cols-2 gap-3">
           <button
             onClick={() => handleLock("lock")}
-            disabled={loading || locked}
+            disabled={loading || !online}
             className="
               flex
               items-center
@@ -150,7 +177,7 @@ export default function LockControl({ binId }: { binId: string }) {
 
           <button
             onClick={() => handleLock("unlock")}
-            disabled={loading || !locked}
+            disabled={loading || !online}
             className="
               flex
               items-center
@@ -186,6 +213,8 @@ export default function LockControl({ binId }: { binId: string }) {
         </div>
       )}
 
+      {!online && <p className="mt-3 text-xs text-amber-400">Servo Lock ยังไม่ออนไลน์</p>}
+      {pending && <p className="mt-3 text-xs text-slate-400">คำสั่งรออุปกรณ์รับผ่าน HTTP (ทุกประมาณ 3 วินาที)</p>}
       {loading && (
         <p className="mt-3 text-center text-xs text-slate-400 animate-pulse">
           Sending command...

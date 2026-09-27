@@ -24,6 +24,9 @@ import {
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import Swal from "sweetalert2";
+
+const actionLabels: Record<string, string> = { LOGIN: "เข้าสู่ระบบ", LOGIN_FAILED: "เข้าสู่ระบบไม่สำเร็จ", CREATE_BIN: "เพิ่มถังขยะ", UPDATE_BIN: "แก้ไขถังขยะ", DELETE_BIN: "ลบถังขยะ", LOCK: "ส่งคำสั่งล็อก", UNLOCK: "ส่งคำสั่งปลดล็อก" };
 
 interface AuditLog {
   _id: string;
@@ -39,6 +42,7 @@ interface AuditLog {
     | "LOCK"
     | "UNLOCK";
   binId?: string;
+  binName?: string;
   ip?: string;
   userAgent?: string;
   details?: Record<string, unknown>;
@@ -65,6 +69,36 @@ export default function LogsPage() {
   const [page, setPage] = useState(1);
   const [action, setAction] = useState("");
   const [binId, setBinId] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const accessToken = session?.user?.accessToken;
+  const invalidRange = Boolean(startDate && endDate && startDate > endDate);
+
+  function filterParams() {
+    const params = new URLSearchParams();
+    if (action) params.set("action", action);
+    if (binId.trim()) params.set("binId", binId.trim());
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    return params;
+  }
+
+  async function exportLogs() {
+    if (!accessToken || invalidRange) return;
+    setExporting(true);
+    try {
+      const response = await fetch(`${API_URL}/api/logs/export?${filterParams()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!response.ok) throw new Error("ไม่สามารถส่งออก Logs ได้");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "audit-logs.csv";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { setError(error instanceof Error ? error.message : "ไม่สามารถส่งออก Logs ได้"); }
+    finally { setExporting(false); }
+  }
 
   const [loading, setLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -73,35 +107,41 @@ export default function LogsPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   async function loadLogs() {
-    if (!session?.user?.accessToken) return;
+    if (!accessToken || session?.user.role !== "admin") return;
 
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
+    const controller = abortControllerRef.current;
+    if (invalidRange) {
+      setError("วันที่เริ่มต้นต้องไม่อยู่หลังวันที่สิ้นสุด");
+      setLogs([]); setPagination(null); setLoading(false); setIsInitialLoad(false);
+      return;
+    }
 
     setLoading(true);
     setError("");
 
     try {
-      const params = new URLSearchParams();
+      const params = filterParams();
       params.set("page", String(page));
       params.set("limit", "20");
-      if (action) params.set("action", action);
-      if (binId) params.set("binId", binId);
 
       const response = await fetch(`${API_URL}/api/logs?${params.toString()}`, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${session.user.accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         cache: "no-store",
-        signal: abortControllerRef.current.signal,
+        signal: controller.signal,
       });
 
       const result = await response.json();
+      if (controller.signal.aborted) return;
 
-      if (!response.ok) {
+      if (!response.ok || !result.success) {
+        setLogs([]); setPagination(null);
         setError(result?.error?.message || "ไม่สามารถโหลด Audit Logs ได้");
         return;
       }
@@ -115,8 +155,10 @@ export default function LogsPage() {
       console.error("Load audit logs error:", err);
       setError("ไม่สามารถเชื่อมต่อ Backend ได้");
     } finally {
-      setLoading(false);
-      setIsInitialLoad(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setIsInitialLoad(false);
+      }
     }
   }
 
@@ -124,11 +166,13 @@ export default function LogsPage() {
     if (status === "authenticated") {
       loadLogs();
     }
-  }, [status, session, page, action, binId]);
+    return () => abortControllerRef.current?.abort();
+  }, [status, accessToken, session?.user.role, page, action, binId, startDate, endDate]);
 
   function resetFilter() {
     setAction("");
     setBinId("");
+    setStartDate(""); setEndDate("");
     setPage(1);
   }
 
@@ -166,11 +210,10 @@ export default function LogsPage() {
     <main className="min-h-screen bg-[#0a0d14] text-white">
       <Sidebar />
 
-      <div className="p-4 pt-20 sm:p-6 lg:ml-64 lg:p-8">
-        <Header />
-
+      <div className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         {/* Page Header */}
-        <div className="mb-6">
+        <div>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
@@ -181,8 +224,11 @@ export default function LogsPage() {
             Audit Logs
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            ประวัติการใช้งานและการทำงานของระบบย้อนหลัง
+            ประวัติการใช้งานและการทำงานของระบบย้อนหลัง • เวลาประเทศไทย (UTC+7)
           </p>
+        </div>
+
+        <Header hideTitle />
         </div>
 
         {/* Filter Section */}
@@ -201,14 +247,8 @@ export default function LogsPage() {
                 }}
                 className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-3 text-sm text-white outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
               >
-                <option value="">All Actions</option>
-                <option value="LOGIN">LOGIN</option>
-                <option value="LOGIN_FAILED">LOGIN_FAILED</option>
-                <option value="CREATE_BIN">CREATE_BIN</option>
-                <option value="UPDATE_BIN">UPDATE_BIN</option>
-                <option value="DELETE_BIN">DELETE_BIN</option>
-                <option value="LOCK">LOCK</option>
-                <option value="UNLOCK">UNLOCK</option>
+                <option value="">ทุกเหตุการณ์</option>
+                {Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </div>
 
@@ -232,6 +272,16 @@ export default function LogsPage() {
               </div>
             </div>
 
+            {[{ label: "ตั้งแต่วันที่", value: startDate, set: setStartDate }, { label: "ถึงวันที่", value: endDate, set: setEndDate }].map(field => (
+              <label key={field.label} className="text-xs text-slate-400">{field.label}
+                <input type="date" value={field.value} onChange={event => { field.set(event.target.value); setPage(1); }} className="mt-2 w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-3 text-sm text-white [color-scheme:dark]" />
+              </label>
+            ))}
+            <div className="flex items-end gap-2">
+              <button onClick={loadLogs} disabled={loading || invalidRange} className="rounded-xl border border-[#212b3d] p-3 text-sm transition hover:bg-[#212b3d] disabled:opacity-40">รีเฟรช</button>
+              <button onClick={exportLogs} disabled={exporting || invalidRange || loading} className="rounded-xl border border-[#212b3d] p-3 text-sm transition hover:bg-[#212b3d] disabled:opacity-40">{exporting ? "กำลังส่งออก…" : "ส่งออก CSV"}</button>
+            </div>
+
             {/* Reset Button */}
             <div className="flex items-end sm:col-span-2 md:col-span-1">
               <button
@@ -240,7 +290,7 @@ export default function LogsPage() {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#212b3d] bg-[#0a0d14] p-3 text-sm font-semibold text-slate-300 transition hover:bg-[#212b3d] hover:text-white active:scale-[0.98]"
               >
                 <RotateCcw className="h-4 w-4" />
-                <span>Reset Filter</span>
+                <span>ล้างตัวกรอง</span>
               </button>
             </div>
           </div>
@@ -282,7 +332,7 @@ export default function LogsPage() {
                       <th className="px-5 py-4 font-semibold">
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5 text-slate-500" />
-                          <span>Time</span>
+                          <span>เวลา (UTC+7)</span>
                         </div>
                       </th>
                       <th className="px-5 py-4 font-semibold">
@@ -303,7 +353,8 @@ export default function LogsPage() {
                           <span>Action</span>
                         </div>
                       </th>
-                      <th className="px-5 py-4 font-semibold">Bin</th>
+                      <th className="px-5 py-4 font-semibold">สถานะ</th>
+                      <th className="px-5 py-4 font-semibold">ถังขยะ</th>
                       <th className="px-5 py-4 font-semibold">IP Address</th>
                       <th className="px-5 py-4 font-semibold">Details</th>
                     </tr>
@@ -327,10 +378,12 @@ export default function LogsPage() {
                         <td className="px-5 py-4">
                           <ActionBadge action={log.action} />
                         </td>
+                        <td className="px-5 py-4"><OutcomeBadge log={log} /></td>
                         <td className="px-5 py-4 font-mono text-slate-300">
                           {log.binId ? (
                             <span className="rounded-lg border border-[#212b3d] bg-[#0a0d14] px-2.5 py-1 text-xs">
                               {log.binId}
+                              {log.binName && <span className="ml-2 font-sans">{log.binName}</span>}
                             </span>
                           ) : (
                             "-"
@@ -340,9 +393,7 @@ export default function LogsPage() {
                           {log.ip || "-"}
                         </td>
                         <td className="max-w-xs px-5 py-4 text-xs text-slate-400">
-                          <div className="max-h-16 overflow-y-auto break-words font-mono text-[11px] text-slate-400">
-                            {log.details ? JSON.stringify(log.details) : "-"}
-                          </div>
+                          <button onClick={() => void Swal.fire({ title: actionLabels[log.action] || log.action, text: `${formatDate(log.timestamp)}\nผู้ดำเนินการ: ${log.email || "ระบบ"}\nถัง: ${log.binName || log.binId || "—"}\nIP: ${log.ip || "—"}\nอุปกรณ์ผู้ใช้: ${log.userAgent || "—"}\n\n${detailText(log.details)}`, confirmButtonText: "ปิด", background: "#131822", color: "#fff", customClass: { htmlContainer: "!whitespace-pre-wrap !text-left !text-sm" } })} className="rounded-lg border border-[#212b3d] px-3 py-2 text-slate-300 transition hover:bg-[#212b3d]">ดูรายละเอียด</button>
                         </td>
                       </tr>
                     ))}
@@ -399,6 +450,25 @@ export default function LogsPage() {
 /* ==================================================
    Sub Components & UI Badges
 ================================================== */
+
+function OutcomeBadge({ log }: { log: AuditLog }) {
+  const failed = log.action === "LOGIN_FAILED" || log.details?.success === false;
+  const command = log.action === "LOCK" || log.action === "UNLOCK";
+  const label = failed ? "ล้มเหลว" : command ? "ส่งคำสั่งแล้ว" : "สำเร็จ";
+  return <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs ${failed ? "bg-rose-500/10 text-rose-400" : command ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>{label}</span>;
+}
+
+function detailText(details?: Record<string, unknown>) {
+  if (!details) return "ไม่มีรายละเอียดเพิ่มเติม";
+  const labels: Record<string, string> = { name: "ชื่อถัง", location: "สถานที่", mqttTopic: "MQTT Topic", thresholdPct: "เกณฑ์ใกล้เต็ม (%)", reason: "สาเหตุ", message: "ข้อความ", action: "คำสั่ง" };
+  const reasons: Record<string, string> = { USER_NOT_FOUND: "ไม่พบผู้ใช้", USER_INACTIVE: "บัญชีถูกระงับ", INVALID_PASSWORD: "รหัสผ่านไม่ถูกต้อง" };
+  const show = (value: unknown) => typeof value === "string" ? reasons[value] || value : JSON.stringify(value) ?? "—";
+  if (details.before && details.after && typeof details.before === "object" && typeof details.after === "object") {
+    const before = details.before as Record<string, unknown>;
+    return Object.entries(details.after).map(([key, value]) => `${labels[key] || key}: ${show(before[key])} → ${show(value)}`).join("\n");
+  }
+  return Object.entries(details).map(([key, value]) => `${labels[key] || key}: ${show(value)}`).join("\n");
+}
 
 function RoleBadge({ role }: { role?: string }) {
   if (!role) return <span className="text-slate-500">-</span>;
@@ -461,7 +531,7 @@ function ActionBadge({ action }: { action: string }) {
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colorStyle}`}
     >
       <Icon className="h-3 w-3" />
-      <span>{action}</span>
+      <span title={action}>{actionLabels[action] || action}</span>
     </span>
   );
 }
@@ -535,7 +605,7 @@ function PageSkeleton() {
   return (
     <main className="flex min-h-screen bg-[#0a0d14]">
       <div className="hidden lg:block lg:w-64" />
-      <div className="w-full p-4 pt-20 sm:p-6 lg:p-8">
+      <div className="w-full p-4 pt-20 sm:p-6 sm:pt-20 lg:p-8">
         <div className="space-y-2">
           <div className="h-8 w-48 animate-pulse rounded-xl bg-[#131822]" />
           <div className="h-4 w-64 animate-pulse rounded-lg bg-[#131822]" />
@@ -556,6 +626,7 @@ function formatDate(timestamp: string) {
   if (Number.isNaN(date.getTime())) return "-";
 
   return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
     year: "numeric",
     month: "short",
     day: "numeric",

@@ -25,10 +25,10 @@ interface Bin {
   location: string;
   mqttTopic: string;
   thresholdPct: number;
-  level?: number;
-  batteryPct?: number;
-  voltage?: number;
-  lastSeen?: string;
+  level?: number | null;
+  batteryPct?: number | null;
+  voltage?: number | null;
+  lastSeen?: string | null;
 }
 
 interface Device {
@@ -436,7 +436,7 @@ function BinDeviceCard({
           <InfoItem
             label="Voltage"
             value={
-              bin.voltage !== undefined
+              typeof bin.voltage === "number" && Number.isFinite(bin.voltage)
                 ? `${bin.voltage.toFixed(1)}V`
                 : "--"
             }

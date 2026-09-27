@@ -5,8 +5,8 @@ const LINE_REPLY_URL =
   "https://api.line.me/v2/bot/message/reply";
 
 export async function sendLineMessage(message: string) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const userId = process.env.LINE_TARGET_USER_ID;
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
+  const userId = process.env.LINE_TARGET_USER_ID?.trim();
 
   if (!token || !userId) {
     throw new Error(
@@ -15,9 +15,9 @@ export async function sendLineMessage(message: string) {
   }
 
   console.log("📤 LINE: sending push message...");
-  console.log("📤 LINE target:", userId);
 
   const response = await fetch(LINE_PUSH_URL, {
+    signal: AbortSignal.timeout(15_000),
     method: "POST",
     headers: {
       "Content-Type": "application/json",

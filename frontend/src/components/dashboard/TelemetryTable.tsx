@@ -184,7 +184,7 @@ export default function TelemetryTable({ binId }: TelemetryTableProps) {
             ) : (
               data.map((item, index) => {
                 const dateStr = item.timestamp
-                  ? new Date(item.timestamp).toLocaleString("th-TH")
+                  ? new Date(item.timestamp).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })
                   : "N/A";
 
                 return (

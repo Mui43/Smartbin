@@ -27,6 +27,7 @@ export async function checkBinAlerts(
 
   const telemetry = await Telemetry.findOne({
     binId,
+    timestamp: { $lte: new Date() },
   })
     .sort({ timestamp: -1 })
     .lean();
@@ -77,9 +78,9 @@ export async function checkBinAlerts(
     telemetry.sensorStatus;
 
   if (
-    sensors.capacitive === "error" ||
-    sensors.inductive === "error" ||
-    sensors.level === "error"
+    sensors?.capacitive === "error" ||
+    sensors?.inductive === "error" ||
+    sensors?.level === "error"
   ) {
     alerts.push({
       type: "SENSOR_ERROR",

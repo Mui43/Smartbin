@@ -677,7 +677,7 @@ function DeviceCard({
   const icon = getDeviceIcon(device.type);
 
   return (
-    <article className="rounded-xl border border-[#212b3d] bg-[#131822] p-5 shadow-lg transition hover:border-slate-700">
+    <article className="flex h-full flex-col rounded-xl border border-[#212b3d] bg-[#131822] p-5 shadow-lg transition hover:border-slate-700">
 
       <div className="flex items-start justify-between gap-3">
 
@@ -705,7 +705,8 @@ function DeviceCard({
         </p>
       )}
 
-      <div className="mt-5 border-t border-[#212b3d] pt-4">
+      <div className="mt-auto pt-5">
+      <div className="border-t border-[#212b3d] pt-4">
 
         <div className="flex items-center justify-between text-xs">
           <span className="text-slate-500">
@@ -768,6 +769,7 @@ function DeviceCard({
         </div>
       )}
 
+      </div>
     </article>
   );
 }
@@ -1213,6 +1215,7 @@ function formatDate(value: string) {
   }
 
   return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

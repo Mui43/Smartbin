@@ -16,6 +16,8 @@ export interface IAlert extends Document {
   active: boolean;
 
   sentToLine: boolean;
+  lineLastAttemptAt?: Date;
+  lineError?: string;
 
   createdAt: Date;
   resolvedAt?: Date;
@@ -66,6 +68,8 @@ const alertSchema = new Schema<IAlert>(
     resolvedAt: {
       type: Date,
     },
+    lineLastAttemptAt: { type: Date },
+    lineError: { type: String },
   },
   {
     timestamps: true,

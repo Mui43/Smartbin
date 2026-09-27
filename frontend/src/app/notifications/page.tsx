@@ -192,9 +192,8 @@ export default function NotificationsPage() {
     <main className="min-h-screen bg-[#0a0d14] text-white">
       <Sidebar />
 
-      <div className="p-4 pt-20 sm:p-6 lg:ml-64 lg:p-8">
-        <Header />
-
+      <div className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         {/* Page Header */}
         <div>
           <div className="flex items-center gap-2">
@@ -209,6 +208,9 @@ export default function NotificationsPage() {
           <p className="mt-1 text-sm text-slate-400">
             ตรวจสอบการแจ้งเตือนและสถานะของ Smart Bin
           </p>
+        </div>
+
+        <Header hideTitle />
         </div>
 
         {/* Summary Cards */}
@@ -639,7 +641,7 @@ function PageSkeleton() {
   return (
     <main className="flex min-h-screen bg-[#0a0d14]">
       <div className="hidden lg:block lg:w-64" />
-      <div className="w-full p-4 pt-20 sm:p-6 lg:p-8">
+      <div className="w-full p-4 pt-20 sm:p-6 sm:pt-20 lg:p-8">
         <div className="space-y-2">
           <div className="h-4 w-24 animate-pulse rounded bg-[#131822]" />
           <div className="h-8 w-48 animate-pulse rounded-xl bg-[#131822]" />
@@ -671,6 +673,7 @@ function formatDate(value?: string) {
   if (Number.isNaN(date.getTime())) return "--";
 
   return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
     dateStyle: "short",
     timeStyle: "medium",
   });

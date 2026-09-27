@@ -1,11 +1,21 @@
 import { Router } from "express";
 import { Bin } from "../models/bin.js";
-import { publishLockCommand } from "../mqtt/client.js";
+import { Device } from "../models/device.js";
 import { authenticate } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createAuditLog } from "../services/auditLog.js";
 
 const router = Router();
+
+const lockDeviceFilter = (binId: string) => ({ binId, type: "SERVO_MOTOR" as const, deviceId: /^servo-lock-/i });
+
+router.get("/:id/lock", authenticate, async (req, res) => {
+  try {
+    const device = await Device.findOne(lockDeviceFilter(String(req.params.id))).lean();
+    if (!device) return res.status(404).json({ success: false, error: { message: "ไม่พบ Servo Lock ที่ลงทะเบียนกับถังนี้" } });
+    res.json({ success: true, data: { state: device.state ?? "unknown", pendingCommand: device.pendingCommand ?? null, online: device.status === "online" && Boolean(device.lastSeen && Date.now() - new Date(device.lastSeen).getTime() < 60000) } });
+  } catch { res.status(500).json({ success: false, error: { message: "ไม่สามารถโหลดสถานะล็อกได้" } }); }
+});
 
 router.post(
   "/:id/lock",
@@ -38,7 +48,13 @@ router.post(
         });
       }
 
-      publishLockCommand(binId, action);
+      const device = await Device.findOne(lockDeviceFilter(binId));
+      if (!device) return res.status(404).json({ success: false, error: { message: "ไม่พบ Servo Lock ที่ลงทะเบียนกับถังนี้" } });
+      if (device.status !== "online" || !device.lastSeen || Date.now() - device.lastSeen.getTime() > 60000) {
+        return res.status(409).json({ success: false, error: { message: "Servo Lock ออฟไลน์ กรุณาตรวจ ESP32" } });
+      }
+      device.pendingCommand = action === "lock" ? "on" : "off";
+      await device.save();
 
       await createAuditLog({
         req,
@@ -49,6 +65,8 @@ router.post(
         binId,
         details: {
           action,
+          deviceId: device.deviceId,
+          delivery: "device-poll",
           message:
             action === "lock"
               ? "Lock command sent"
