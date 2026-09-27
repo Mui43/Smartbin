@@ -40,11 +40,9 @@ export default function WasteChart({ binId }: { binId: string }) {
   const [range, setRange] = useState<WasteRange>("day");
 
   const [month, setMonth] = useState(() => {
-    const now = new Date();
-
-    return `${now.getFullYear()}-${String(
-      now.getMonth() + 1,
-    ).padStart(2, "0")}`;
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date()).slice(0, 7);
   });
 
   const [data, setData] = useState<WasteStats | null>(null);
@@ -54,6 +52,15 @@ export default function WasteChart({ binId }: { binId: string }) {
   const [error, setError] = useState("");
 
   const chartRef = useRef<Chart<"line"> | null>(null);
+
+  useEffect(() => {
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    let active = true;
+    void document.fonts.ready.then(() => {
+      if (active) chartRef.current?.update("none");
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const API_URL =
@@ -271,15 +278,12 @@ export default function WasteChart({ binId }: { binId: string }) {
     const [year, month] =
       value.split("-").map(Number);
 
-    const date = new Date(
-      year,
-      month - 1,
-      1,
-    );
+    const date = new Date(`${year}-${String(month).padStart(2, "0")}-01T12:00:00+07:00`);
 
     return date.toLocaleDateString(
       "th-TH",
       {
+        timeZone: "Asia/Bangkok",
         month: "long",
         year: "numeric",
       },

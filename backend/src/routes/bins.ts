@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { thaiDateFilter } from "../lib/thaiTime.js";
 import { Bin } from "../models/bin.js";
 import { Telemetry } from "../models/telemetry.js";
 import { authenticate } from "../middleware/auth.js";
@@ -234,7 +235,7 @@ router.put(
         { binId },
         { $set: updateData },
         {
-          new: true,
+          new: false,
           runValidators: true,
         }
       );
@@ -255,12 +256,14 @@ router.put(
         binId,
         details: {
           changes: updateData,
+          before: Object.fromEntries(Object.keys(updateData).map(key => [key, bin.get(key)])),
+          after: updateData,
         },
       });
 
       res.json({
         success: true,
-        data: bin,
+        data: { ...bin.toObject(), ...updateData },
       });
     } catch (error) {
       console.error("Update bin error:", error);
@@ -365,75 +368,22 @@ router.get(
         100
       );
 
-      const startDate = req.query.startDate
-        ? new Date(
-          String(req.query.startDate)
-        )
-        : null;
-
-      const endDate = req.query.endDate
-        ? new Date(
-          String(req.query.endDate)
-        )
-        : null;
-
-      if (
-        startDate &&
-        Number.isNaN(startDate.getTime())
-      ) {
+      let timestamp: ReturnType<typeof thaiDateFilter>;
+      try {
+        timestamp = thaiDateFilter(
+          req.query.startDate ? String(req.query.startDate) : undefined,
+          req.query.endDate ? String(req.query.endDate) : undefined,
+        );
+      } catch (error) {
         return res.status(400).json({
           success: false,
-          error: {
-            code: "INVALID_START_DATE",
-            message: "Invalid startDate",
-          },
+          error: { code: "INVALID_DATE_RANGE", message: error instanceof Error ? error.message : "Invalid date range" },
         });
       }
-
-      if (
-        endDate &&
-        Number.isNaN(endDate.getTime())
-      ) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: "INVALID_END_DATE",
-            message: "Invalid endDate",
-          },
-        });
-      }
-
-      const filter: {
-        binId: string;
-        timestamp?: {
-          $gte?: Date;
-          $lte?: Date;
-        };
-      } = {
+      const filter = {
         binId,
+        ...(Object.keys(timestamp).length ? { timestamp } : {}),
       };
-
-      if (startDate || endDate) {
-        filter.timestamp = {};
-
-        if (startDate) {
-          filter.timestamp.$gte =
-            startDate;
-        }
-
-        if (endDate) {
-          endDate.setHours(
-            23,
-            59,
-            59,
-            999
-          );
-
-          filter.timestamp.$lte =
-            endDate;
-        }
-      }
-
       const skip =
         (page - 1) * limit;
 

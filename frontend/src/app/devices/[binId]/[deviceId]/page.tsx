@@ -98,16 +98,16 @@ function getStatusClass(
 ) {
   switch (status) {
     case "online":
-      return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+      return "border border-emerald-500/20 bg-emerald-500/10 text-emerald-400";
 
     case "warning":
-      return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400";
+      return "border border-amber-500/20 bg-amber-500/10 text-amber-400";
 
     case "offline":
-      return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+      return "border border-rose-500/20 bg-rose-500/10 text-rose-400";
 
     default:
-      return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+      return "border border-[#212b3d] bg-[#0a0d14] text-slate-400";
   }
 }
 
@@ -160,6 +160,7 @@ function formatDate(
   return date.toLocaleString(
     "th-TH",
     {
+      timeZone: "Asia/Bangkok",
       dateStyle: "medium",
       timeStyle: "medium",
     }
@@ -370,10 +371,10 @@ export default function DeviceDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <div className="min-h-screen bg-[#0a0d14] text-white">
         <Sidebar />
 
-        <main className="ml-64 p-8">
+        <main className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
           <div className="flex items-center gap-3">
             <RefreshCw
               className="animate-spin"
@@ -395,10 +396,10 @@ export default function DeviceDetailPage() {
 
   if (error || !device) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <div className="min-h-screen bg-[#0a0d14] text-white">
         <Sidebar />
 
-        <main className="ml-64 p-8">
+        <main className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
           <button
             onClick={() =>
               router.push(
@@ -407,13 +408,13 @@ export default function DeviceDetailPage() {
                 )}`
               )
             }
-            className="mb-6 flex items-center gap-2 rounded-lg border px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="mb-6 flex items-center gap-2 rounded-lg border border-[#212b3d] bg-[#131822] px-4 py-2 transition hover:border-emerald-500/40 hover:text-emerald-400"
           >
             <ArrowLeft size={18} />
             กลับ
           </button>
 
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-6 text-rose-400">
             {error ||
               "ไม่พบ Device"}
           </div>
@@ -427,10 +428,10 @@ export default function DeviceDetailPage() {
   // ==================================
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen bg-[#0a0d14] text-white">
       <Sidebar />
 
-      <main className="ml-64 p-8">
+      <main className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
         {/* Header */}
 
         <div className="mb-8">
@@ -442,7 +443,7 @@ export default function DeviceDetailPage() {
                 )}`
               )
             }
-            className="mb-5 flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+            className="mb-5 flex items-center gap-2 text-sm text-slate-400 transition hover:text-emerald-400"
           >
             <ArrowLeft size={18} />
             กลับไปยัง Devices
@@ -451,16 +452,16 @@ export default function DeviceDetailPage() {
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
               <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-blue-100 p-3 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                <div className="rounded-xl border border-[#212b3d] bg-[#131822] p-3 text-emerald-400">
                   <Cpu size={28} />
                 </div>
 
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  <h1 className="text-2xl font-bold text-white">
                     {device.name}
                   </h1>
 
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-sm text-slate-400">
                     {device.deviceId}
                   </p>
                 </div>
@@ -496,7 +497,7 @@ export default function DeviceDetailPage() {
             }`}
           />
 
-          <span className="text-gray-600 dark:text-gray-400">
+          <span className="text-slate-400">
             {sseConnected
               ? "Real-time connected"
               : "Real-time disconnected"}
@@ -505,17 +506,17 @@ export default function DeviceDetailPage() {
 
         {/* Cards */}
 
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-3">
           {/* Status */}
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex h-full min-h-[180px] flex-col rounded-2xl border border-[#212b3d] bg-[#131822] p-6 shadow-lg transition duration-200 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-emerald-950/20">
             <div className="mb-4 flex items-center gap-3">
               <Activity
                 className="text-blue-500"
                 size={22}
               />
 
-              <h2 className="font-semibold text-gray-900 dark:text-white">
+              <h2 className="font-semibold text-white">
                 สถานะ
               </h2>
             </div>
@@ -539,49 +540,38 @@ export default function DeviceDetailPage() {
 
           {/* Type */}
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex h-full min-h-[180px] flex-col rounded-2xl border border-[#212b3d] bg-[#131822] p-6 shadow-lg transition duration-200 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-emerald-950/20">
             <div className="mb-4 flex items-center gap-3">
               <Cpu
                 className="text-purple-500"
                 size={22}
               />
 
-              <h2 className="font-semibold text-gray-900 dark:text-white">
+              <h2 className="font-semibold text-white">
                 ประเภท Hardware
               </h2>
             </div>
 
-            <p className="font-medium text-gray-900 dark:text-white">
+            <p className="font-medium text-white">
               {device.type}
             </p>
           </div>
 
-          {device.type === "ESP32" && (
-            <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <h2 className="mb-4 font-semibold text-gray-900 dark:text-white">
-                สถานะรีเลย์
-              </h2>
-              <p className="font-medium text-gray-900 dark:text-white">
-                {device.state === "on" ? "เปิด" : device.state === "off" ? "ปิด" : "ยังไม่มีข้อมูล"}
-              </p>
-            </div>
-          )}
-
           {/* Last Seen */}
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex h-full min-h-[180px] flex-col rounded-2xl border border-[#212b3d] bg-[#131822] p-6 shadow-lg transition duration-200 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-emerald-950/20">
             <div className="mb-4 flex items-center gap-3">
               <Clock
                 className="text-orange-500"
                 size={22}
               />
 
-              <h2 className="font-semibold text-gray-900 dark:text-white">
+              <h2 className="font-semibold text-white">
                 Last Seen
               </h2>
             </div>
 
-            <p className="text-sm text-gray-700 dark:text-gray-300">
+            <p className="text-sm text-slate-300">
               {formatDate(
                 device.lastSeen
               )}
@@ -590,34 +580,34 @@ export default function DeviceDetailPage() {
 
           {/* Bin */}
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex h-full min-h-[180px] flex-col rounded-2xl border border-[#212b3d] bg-[#131822] p-6 shadow-lg transition duration-200 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-emerald-950/20">
             <div className="mb-4 flex items-center gap-3">
               <MapPin
                 className="text-green-500"
                 size={22}
               />
 
-              <h2 className="font-semibold text-gray-900 dark:text-white">
+              <h2 className="font-semibold text-white">
                 Smart Bin
               </h2>
             </div>
 
             {bin ? (
               <div>
-                <p className="font-medium text-gray-900 dark:text-white">
+                <p className="font-medium text-white">
                   {bin.name}
                 </p>
 
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-sm text-slate-400">
                   {bin.binId}
                 </p>
 
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                <p className="mt-2 text-sm text-slate-400">
                   {bin.location}
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-slate-400">
                 ไม่พบข้อมูล Bin
               </p>
             )}
@@ -625,24 +615,24 @@ export default function DeviceDetailPage() {
 
           {/* Device ID */}
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-            <h2 className="mb-4 font-semibold text-gray-900 dark:text-white">
+          <div className="flex h-full min-h-[180px] flex-col rounded-2xl border border-[#212b3d] bg-[#131822] p-6 shadow-lg transition duration-200 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-emerald-950/20">
+            <h2 className="mb-4 font-semibold text-white">
               Device ID
             </h2>
 
-            <code className="break-all rounded-lg bg-gray-100 px-3 py-2 text-sm dark:bg-gray-800">
+            <code className="break-all rounded-lg border border-[#212b3d] bg-[#0a0d14] px-3 py-2 text-sm text-slate-300">
               {device.deviceId}
             </code>
           </div>
 
           {/* Description */}
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-            <h2 className="mb-4 font-semibold text-gray-900 dark:text-white">
+          <div className="flex h-full min-h-[180px] flex-col rounded-2xl border border-[#212b3d] bg-[#131822] p-6 shadow-lg transition duration-200 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-emerald-950/20">
+            <h2 className="mb-4 font-semibold text-white">
               รายละเอียด
             </h2>
 
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-slate-400">
               {device.description ||
                 "ไม่มีรายละเอียด"}
             </p>
@@ -650,7 +640,7 @@ export default function DeviceDetailPage() {
         </div>
 
         {device.type === "ESP32" && (
-          <div className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5 text-sm text-slate-300">
+          <div className="mt-6 rounded-2xl border border-[#212b3d] bg-[#131822] p-5 text-sm text-slate-300 transition duration-200 hover:border-emerald-500/40">
             <p className="font-semibold text-white">การเชื่อมต่อ ESP32</p>
             <p className="mt-2">
               ตั้ง Device ID ในเฟิร์มแวร์เป็น <code>{device.deviceId}</code> และตั้ง Wi-Fi,
@@ -666,12 +656,12 @@ export default function DeviceDetailPage() {
           Object.keys(
             device.metadata
           ).length > 0 && (
-            <div className="mt-6 rounded-2xl border bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <h2 className="mb-4 font-semibold text-gray-900 dark:text-white">
+            <div className="mt-6 flex h-full min-h-[180px] flex-col rounded-2xl border border-[#212b3d] bg-[#131822] p-6 shadow-lg transition duration-200 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-emerald-950/20">
+              <h2 className="mb-4 font-semibold text-white">
                 Metadata
               </h2>
 
-              <pre className="overflow-x-auto rounded-xl bg-gray-100 p-4 text-sm dark:bg-gray-800">
+              <pre className="overflow-x-auto rounded-xl bg-[#0a0d14] p-4 text-sm text-slate-300">
                 {JSON.stringify(
                   device.metadata,
                   null,
@@ -686,7 +676,7 @@ export default function DeviceDetailPage() {
         <div className="mt-6 flex justify-end">
           <button
             onClick={loadDevice}
-            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+            className="flex items-center gap-2 rounded-lg border border-[#212b3d] bg-[#131822] px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-emerald-500/40 hover:bg-[#212b3d] hover:text-white"
           >
             <RefreshCw
               size={16}

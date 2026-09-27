@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   XCircle,
   Cpu,
+  Plus,
 } from "lucide-react";
 
 import { useTelemetry, type TelemetryData } from "@/hooks/useTelemetry";
@@ -24,6 +25,7 @@ import TelemetryTable from "@/components/dashboard/TelemetryTable";
 import AlertBanner from "@/components/ui/AlertBanner";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import AddBinForm from "@/components/dashboard/AddBinForm";
 
 interface DashboardBin {
   binId: string;
@@ -44,6 +46,8 @@ export default function Home() {
   const [selectedBinId, setSelectedBinId] = useState<string | null>(null);
   const [binsLoading, setBinsLoading] = useState(true);
   const [binsError, setBinsError] = useState("");
+  const [showAddBin, setShowAddBin] = useState(false);
+  const [binNotice, setBinNotice] = useState("");
 
   useEffect(() => {
     const token = session?.user?.accessToken;
@@ -159,10 +163,38 @@ export default function Home() {
         </div>
 
         <section className="mb-6" aria-label="เลือกถังขยะ">
-          <div className="mb-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
             <h2 className="text-lg font-bold text-white">เลือกถังขยะ</h2>
             <p className="text-sm text-slate-400">เลือกถังเพื่อดูข้อมูลของถังนั้น</p>
+            </div>
+            {session?.user?.role === "admin" && !showAddBin && (
+              <button
+                type="button"
+                disabled={binsLoading}
+                onClick={() => { setShowAddBin(true); setBinNotice(""); }}
+                className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 transition hover:bg-emerald-500/20 disabled:opacity-50"
+              >
+                <Plus size={16} /> เพิ่มถัง
+              </button>
+            )}
           </div>
+          {showAddBin && session?.user?.role === "admin" && session.user.accessToken && (
+            <AddBinForm
+              accessToken={session.user.accessToken}
+              onCancel={() => setShowAddBin(false)}
+              onCreated={(bin) => {
+                setBins((current) => [...current.filter((item) => item.binId !== bin.binId), {
+                  ...bin, level: null, batteryPct: null, voltage: null,
+                  sensorStatus: null, lastSeen: null,
+                }]);
+                setSelectedBinId(bin.binId);
+                setShowAddBin(false);
+                setBinNotice(`เพิ่มถัง ${bin.name} สำเร็จแล้ว`);
+              }}
+            />
+          )}
+          {binNotice && <p role="status" className="mb-3 text-sm text-emerald-400">{binNotice}</p>}
           {binsError && <p className="mb-3 text-sm text-rose-400">{binsError}</p>}
           {binsLoading ? (
             <p className="text-sm text-slate-400">กำลังโหลดรายการถัง...</p>

@@ -9,6 +9,7 @@ import {
   ChevronRight,
   FileX,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import Swal from "sweetalert2";
 
@@ -35,10 +36,14 @@ export default function HistoryPage() {
   const [page, setPage] = useState(1);
   const [loadingBins, setLoadingBins] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [binsError, setBinsError] = useState("");
+  const accessToken = session?.user?.accessToken;
+  const invalidRange = Boolean(startDate && endDate && startDate > endDate);
 
   useEffect(() => {
+    const controller = new AbortController();
     async function loadBins() {
-      if (!session?.user?.accessToken) {
+      if (!accessToken) {
         setLoadingBins(false);
         return;
       }
@@ -46,12 +51,15 @@ export default function HistoryPage() {
       try {
         const response = await fetch(`${API_URL}/api/bins`, {
           headers: {
-            Authorization: `Bearer ${session.user.accessToken}`,
+            Authorization: `Bearer ${accessToken}`,
           },
           cache: "no-store",
+          signal: controller.signal,
         });
 
         const result = await response.json();
+        if (controller.signal.aborted) return;
+        if (!response.ok || !result.success) throw new Error(result?.error?.message || "ไม่สามารถโหลดรายการถังได้");
 
         if (response.ok && result.success) {
           const list = result.data || [];
@@ -62,22 +70,21 @@ export default function HistoryPage() {
           }
         }
       } catch (error) {
+        if (controller.signal.aborted) return;
+        setBinsError(error instanceof Error ? error.message : "ไม่สามารถโหลดรายการถังได้");
         console.error("Load bins error:", error);
       } finally {
-        setLoadingBins(false);
+        if (!controller.signal.aborted) setLoadingBins(false);
       }
     }
 
     if (status === "authenticated") {
       loadBins();
     }
-  }, [status, session]);
+    return () => controller.abort();
+  }, [status, accessToken]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [selectedBin, startDate, endDate]);
-
-  const { data, pagination, loading, error } = useTelemetryHistory(
+  const { data, pagination, loading, error, reload } = useTelemetryHistory(
     selectedBin,
     10,
     page,
@@ -86,7 +93,7 @@ export default function HistoryPage() {
   );
 
   async function handleExport() {
-    if (!session?.user?.accessToken || !selectedBin) {
+    if (!session?.user?.accessToken || !selectedBin || invalidRange) {
       return;
     }
 
@@ -216,7 +223,7 @@ export default function HistoryPage() {
           </h1>
 
           <p className="mt-2 text-sm text-slate-400">
-            ตรวจสอบข้อมูลย้อนหลังของ Smart Bin
+            ตรวจสอบข้อมูลย้อนหลังของ Smart Bin • เวลาประเทศไทย (UTC+7)
           </p>
         </div>
 
@@ -238,7 +245,7 @@ export default function HistoryPage() {
             {/* Bin */}
             <div>
               <label className="mb-2 block text-xs font-medium text-slate-400">
-                Device
+                ถังขยะ
               </label>
 
               {loadingBins ? (
@@ -247,7 +254,7 @@ export default function HistoryPage() {
                 <select
                   value={selectedBin}
                   disabled={loadingBins}
-                  onChange={(event) => setSelectedBin(event.target.value)}
+                  onChange={(event) => { setPage(1); setSelectedBin(event.target.value); }}
                   className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
                 >
                   {bins.length === 0 ? (
@@ -267,21 +274,21 @@ export default function HistoryPage() {
             <DateInput
               label="Start Date"
               value={startDate}
-              onChange={(value) => setStartDate(value)}
+              onChange={(value) => { setPage(1); setStartDate(value); }}
             />
 
             {/* End Date */}
             <DateInput
               label="End Date"
               value={endDate}
-              onChange={(value) => setEndDate(value)}
+              onChange={(value) => { setPage(1); setEndDate(value); }}
             />
 
             {/* Export CSV Button */}
             <div className="flex items-end">
               <button
                 onClick={handleExport}
-                disabled={exporting || !selectedBin}
+                disabled={exporting || !selectedBin || invalidRange || loadingBins}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-3 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:border-emerald-500/50 hover:bg-[#1a2232] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {exporting ? (
@@ -299,6 +306,7 @@ export default function HistoryPage() {
             </div>
           </div>
 
+          {binsError && <p role="alert" className="mt-4 text-sm text-rose-400">{binsError}</p>}
           {/* Reset Filters */}
           {(startDate || endDate) && (
             <button
@@ -327,6 +335,9 @@ export default function HistoryPage() {
                 <h2 className="mt-1 text-xl font-bold text-white">Telemetry</h2>
               </div>
 
+              <button type="button" onClick={reload} disabled={loading || !selectedBin || invalidRange} className="flex items-center gap-2 rounded-lg border border-[#212b3d] px-3 py-2 text-sm text-slate-300 transition hover:bg-[#212b3d] disabled:opacity-50">
+                <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> รีเฟรช
+              </button>
               {pagination && !loading && (
                 <span className="text-xs text-slate-400">
                   {pagination.total} records
@@ -347,7 +358,7 @@ export default function HistoryPage() {
                 <table className="w-full min-w-[900px] text-left">
                   <thead>
                     <tr className="border-b border-[#212b3d] bg-[#0a0d14]/60">
-                      <TableHead>Time</TableHead>
+                      <TableHead>Time (UTC+7)</TableHead>
                       <TableHead>Level</TableHead>
                       <TableHead>Capacitive</TableHead>
                       <TableHead>Inductive</TableHead>
@@ -675,6 +686,7 @@ function formatDate(value: string) {
   }
 
   return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
     dateStyle: "short",
     timeStyle: "medium",
   });

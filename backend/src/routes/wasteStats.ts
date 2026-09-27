@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { thaiPeriod, THAI_TIME_ZONE } from "../lib/thaiTime.js";
 import { WasteEvent } from "../models/wasteEvent.js";
 
 const router = Router();
@@ -14,86 +15,17 @@ router.get("/", async (req, res) => {
       ? String(req.query.month)
       : null;
 
-    const now = new Date();
-
-    let start: Date;
-    let end: Date;
-    let groupFormat: string;
-
-    // =========================
-    // DAY
-    // =========================
-    if (range === "day") {
-      start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-      );
-
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + 1
-      );
-
-      groupFormat = "%H:00";
-    }
-
-    // =========================
-    // WEEK
-    // =========================
-    else if (range === "week") {
-      start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-
-      const day = start.getDay();
-
-      const diff = day === 0 ? 6 : day - 1;
-
-      start.setDate(start.getDate() - diff);
-
-      end = new Date(start);
-      end.setDate(start.getDate() + 7);
-
-      groupFormat = "%Y-%m-%d";
-    }
-
-    // =========================
-    // MONTH
-    // =========================
-    else if (range === "month") {
-      if (monthParam) {
-        const [year, month] = monthParam
-          .split("-")
-          .map(Number);
-
-        start = new Date(year, month - 1, 1);
-
-        end = new Date(year, month, 1);
-      } else {
-        start = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          1
-        );
-
-        end = new Date(
-          now.getFullYear(),
-          now.getMonth() + 1,
-          1
-        );
-      }
-
-      groupFormat = "%Y-%m-%d";
-    }
-
-    else {
+    let period: ReturnType<typeof thaiPeriod>;
+    try {
+      period = thaiPeriod(range, monthParam ?? undefined);
+    } catch (error) {
       return res.status(400).json({
         success: false,
-        message: "Invalid range",
+        message: error instanceof Error ? error.message : "Invalid range",
       });
     }
-
+    const { start, end } = period;
+    const groupFormat = range === "day" ? "%H:00" : "%Y-%m-%d";
     const result = await WasteEvent.aggregate([
       {
         $match: {
@@ -111,6 +43,7 @@ router.get("/", async (req, res) => {
             $dateToString: {
               format: groupFormat,
               date: "$timestamp",
+              timezone: THAI_TIME_ZONE,
             },
           },
 

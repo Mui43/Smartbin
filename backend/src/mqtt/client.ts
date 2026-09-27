@@ -336,6 +336,12 @@ export function startMqtt() {
         // Save Telemetry
         // ==========================
 
+        const receivedAt = new Date();
+        const reportedAt = data.timestamp ? new Date(data.timestamp) : receivedAt;
+        // Invalid/future device clocks must not override the current bin state.
+        const timestamp = Number.isFinite(reportedAt.getTime()) && reportedAt <= receivedAt
+          ? reportedAt
+          : receivedAt;
         const telemetry =
           await Telemetry.create({
             binId,
@@ -362,12 +368,7 @@ export function startMqtt() {
                 ? data.batteryPct
                 : 0,
 
-            timestamp:
-              data.timestamp
-                ? new Date(
-                    data.timestamp
-                  )
-                : new Date(),
+            timestamp,
           });
 
         console.log(

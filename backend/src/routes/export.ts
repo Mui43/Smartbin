@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { thaiDateFilter, thaiDateKey, thaiTimestamp } from "../lib/thaiTime.js";
 import { Telemetry } from "../models/telemetry.js";
 import { Bin } from "../models/bin.js";
 import { authenticate } from "../middleware/auth.js";
@@ -55,64 +56,19 @@ router.get(
         });
       }
 
-      const filter: Record<
-        string,
-        unknown
-      > = {
+      let timestamp: ReturnType<typeof thaiDateFilter>;
+      try {
+        timestamp = thaiDateFilter(startDate, endDate);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          error: { code: "INVALID_DATE_RANGE", message: error instanceof Error ? error.message : "Invalid date range" },
+        });
+      }
+      const filter = {
         binId,
+        ...(Object.keys(timestamp).length ? { timestamp } : {}),
       };
-
-      if (startDate) {
-        const start = new Date(
-          `${startDate}T00:00:00.000Z`
-        );
-
-        if (Number.isNaN(start.getTime())) {
-          return res.status(400).json({
-            success: false,
-            error: {
-              code: "INVALID_START_DATE",
-              message:
-                "Invalid startDate",
-            },
-          });
-        }
-
-        filter.timestamp = {
-          $gte: start,
-        };
-      }
-
-      if (endDate) {
-        const end = new Date(
-          `${endDate}T23:59:59.999Z`
-        );
-
-        if (Number.isNaN(end.getTime())) {
-          return res.status(400).json({
-            success: false,
-            error: {
-              code: "INVALID_END_DATE",
-              message:
-                "Invalid endDate",
-            },
-          });
-        }
-
-        if (filter.timestamp) {
-          (
-            filter.timestamp as {
-              $gte?: Date;
-              $lte?: Date;
-            }
-          ).$lte = end;
-        } else {
-          filter.timestamp = {
-            $lte: end,
-          };
-        }
-      }
-
       const telemetry =
         await Telemetry.find(filter)
           .sort({
@@ -147,7 +103,7 @@ router.get(
       };
 
       const header = [
-        "Time",
+        "Time (Asia/Bangkok)",
         "Bin ID",
         "Bin Name",
         "Location",
@@ -161,9 +117,7 @@ router.get(
 
       const rows = telemetry.map(
         (item) => [
-          new Date(
-            item.timestamp
-          ).toISOString(),
+          thaiTimestamp(new Date(item.timestamp)),
 
           item.binId,
 
@@ -199,9 +153,7 @@ router.get(
         ].join("\r\n");
 
       const filename =
-        `telemetry-${binId}-${new Date()
-          .toISOString()
-          .slice(0, 10)}.csv`;
+        `telemetry-${binId}-${thaiDateKey()}.csv`;
 
       res.setHeader(
         "Content-Type",

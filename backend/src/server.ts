@@ -13,6 +13,7 @@ import realtimeRouter from "./routes/realtime.js";
 import lockRouter from "./routes/lock.js";
 import alertsRouter from "./routes/alerts.js";
 import lineRouter from "./routes/line.js";
+import { startAlertChecker } from "./alerts/notifyAlerts.js";
 import authRouter from "./routes/auth.js";
 import logsRouter from "./routes/logs.js";
 import exportRouter from "./routes/export.js";
@@ -147,6 +148,7 @@ async function startServer() {
     await connectDatabase();
 
     startMqtt();
+    startAlertChecker();
 
     app.listen(
       PORT,

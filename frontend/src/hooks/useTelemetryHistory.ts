@@ -41,10 +41,21 @@ export function useTelemetryHistory(
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const accessToken = session?.user?.accessToken;
 
   useEffect(() => {
+    const controller = new AbortController();
     async function fetchHistory() {
-      if (!session?.user?.accessToken || !binId) {
+      setData([]);
+      setPagination(null);
+      setError("");
+      if (!accessToken || !binId) {
+        setLoading(false);
+        return;
+      }
+      if (startDate && endDate && startDate > endDate) {
+        setError("วันที่เริ่มต้นต้องไม่อยู่หลังวันที่สิ้นสุด");
         setLoading(false);
         return;
       }
@@ -67,19 +78,21 @@ export function useTelemetryHistory(
         }
 
         const response = await fetch(
-          `http://localhost:4000/api/bins/${binId}/telemetry?${params.toString()}`,
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/bins/${encodeURIComponent(binId)}/telemetry?${params.toString()}`,
           {
             method: "GET",
             headers: {
-              Authorization: `Bearer ${session.user.accessToken}`,
+              Authorization: `Bearer ${accessToken}`,
             },
             cache: "no-store",
+            signal: controller.signal,
           }
         );
 
         const result = await response.json();
+        if (controller.signal.aborted) return;
 
-        if (!response.ok) {
+        if (!response.ok || !result.success) {
           setError(
             result?.error?.message ||
               "ไม่สามารถโหลดข้อมูล Telemetry ได้"
@@ -95,6 +108,7 @@ export function useTelemetryHistory(
           setPagination(result.pagination);
         }
       } catch (error) {
+        if (controller.signal.aborted) return;
         console.error(
           "Telemetry history error:",
           error
@@ -107,18 +121,20 @@ export function useTelemetryHistory(
         setData([]);
         setPagination(null);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
 
     fetchHistory();
+    return () => controller.abort();
   }, [
     binId,
     limit,
     page,
     startDate,
     endDate,
-    session,
+    accessToken,
+    revision,
   ]);
 
   return {
@@ -126,5 +142,6 @@ export function useTelemetryHistory(
     pagination,
     loading,
     error,
+    reload: () => setRevision((current) => current + 1),
   };
 }

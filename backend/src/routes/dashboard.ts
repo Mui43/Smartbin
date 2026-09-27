@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { thaiDayStart, thaiDateKey, THAI_TIME_ZONE } from "../lib/thaiTime.js";
 import { Telemetry } from "../models/telemetry.js";
 import { authenticate } from "../middleware/auth.js";
 
@@ -37,41 +38,9 @@ router.get(
 
       const now = new Date();
 
-      const startDate = new Date(now);
-
-      if (range === "day") {
-        startDate.setHours(
-          0,
-          0,
-          0,
-          0
-        );
-      }
-
-      if (range === "week") {
-        startDate.setDate(
-          startDate.getDate() - 6
-        );
-        startDate.setHours(
-          0,
-          0,
-          0,
-          0
-        );
-      }
-
-      if (range === "month") {
-        startDate.setDate(
-          startDate.getDate() - 29
-        );
-        startDate.setHours(
-          0,
-          0,
-          0,
-          0
-        );
-      }
-
+      const today = thaiDayStart(thaiDateKey(now));
+      const daysBack = range === "week" ? 6 : range === "month" ? 29 : 0;
+      const startDate = new Date(today.getTime() - daysBack * 86400000);
       const telemetry =
         await Telemetry.find({
           timestamp: {
@@ -153,15 +122,12 @@ router.get(
         let key: string;
 
         if (range === "day") {
-          key = `${String(
-            date.getHours()
-          ).padStart(2, "0")}:00`;
+          key = new Intl.DateTimeFormat("en-GB", {
+            timeZone: THAI_TIME_ZONE, hour: "2-digit", hourCycle: "h23",
+          }).format(date) + ":00";
         } else {
-          key = date
-            .toISOString()
-            .slice(0, 10);
+          key = thaiDateKey(date);
         }
-
         if (!chartMap.has(key)) {
           chartMap.set(key, []);
         }

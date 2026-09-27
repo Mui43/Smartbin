@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import LogoutButton from "@/components/auth/LogoutButton";
 
-export default function Header() {
+export default function Header({ hideTitle = false }: { hideTitle?: boolean }) {
   const { data: session } = useSession();
 
   const displayName =
@@ -17,24 +17,22 @@ export default function Header() {
 
   return (
     <header
-      className="
-        mb-6
+      className={`
+        ${hideTitle ? "" : "mb-6 pt-16 sm:mb-8"}
         flex
         flex-col
         gap-4
-        pt-16
-        sm:mb-8
         sm:flex-row
         sm:items-center
-        sm:justify-between
+        ${hideTitle ? "sm:justify-end" : "sm:justify-between"}
         sm:pt-0
-      "
+      `}
     >
       {/* =========================
           Title
       ========================= */}
 
-      <div>
+      {!hideTitle && <div>
         <p className="mb-1 text-sm font-medium text-[#90AB8B]">
           IoT Monitoring
         </p>
@@ -54,7 +52,7 @@ export default function Header() {
         <p className="mt-1 text-sm text-[#90AB8B]">
           Solar-Powered Recycling Waste Sorting System
         </p>
-      </div>
+      </div>}
 
       {/* =========================
           User

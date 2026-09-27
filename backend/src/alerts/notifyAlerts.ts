@@ -1,8 +1,27 @@
 import { Alert } from "../models/alert.js";
 import { sendLineMessage } from "../services/line.js";
 import { checkBinAlerts } from "./checkAlerts.js";
+import { Bin } from "../models/bin.js";
+
+const checkingBins = new Set<string>();
+const RETRY_MS = 60_000;
+
+export function startAlertChecker() {
+  const check = async () => {
+    try {
+      const bins = await Bin.find().select("binId").lean();
+      for (const bin of bins) await notifyBinAlerts(bin.binId);
+    } catch (error) {
+      console.error("Alert checker failed:", error);
+    }
+  };
+  void check();
+  setInterval(() => { void check(); }, RETRY_MS).unref();
+}
 
 export async function notifyBinAlerts(binId: string) {
+  if (checkingBins.has(binId)) return;
+  checkingBins.add(binId);
   try {
     console.log(`🔎 Checking alerts for ${binId}`);
 
@@ -54,7 +73,7 @@ export async function notifyBinAlerts(binId: string) {
       });
 
       // มี Alert เดิมอยู่แล้ว
-      if (existingAlert) {
+      if (existingAlert?.sentToLine || (existingAlert?.lineLastAttemptAt && Date.now() - existingAlert.lineLastAttemptAt.getTime() < RETRY_MS)) {
         console.log(
           `ℹ️ Alert already active: ${binId} ${alert.type}`
         );
@@ -66,7 +85,7 @@ export async function notifyBinAlerts(binId: string) {
       // 3. สร้าง Alert ใน MongoDB
       // ==========================================
 
-      const newAlert = await Alert.create({
+      const newAlert = existingAlert ?? await Alert.create({
         binId,
         type: alert.type,
         level: alert.level,
@@ -84,6 +103,8 @@ export async function notifyBinAlerts(binId: string) {
       // ==========================================
 
       try {
+        newAlert.lineLastAttemptAt = new Date();
+        await newAlert.save();
         const message =
           `🤖 Smart Bin Alert\n\n` +
           `🗑️ Bin: ${binId}\n` +
@@ -100,6 +121,7 @@ export async function notifyBinAlerts(binId: string) {
         await sendLineMessage(message);
 
         newAlert.sentToLine = true;
+        newAlert.lineError = undefined;
 
         await newAlert.save();
 
@@ -107,6 +129,8 @@ export async function notifyBinAlerts(binId: string) {
           `📱 LINE alert sent: ${binId} ${alert.type}`
         );
       } catch (error) {
+        newAlert.lineError = error instanceof Error ? error.message : "LINE notification failed";
+        await newAlert.save();
         console.error(
           "❌ LINE notification failed:",
           error
@@ -118,5 +142,7 @@ export async function notifyBinAlerts(binId: string) {
       "❌ Alert notification error:",
       error
     );
+  } finally {
+    checkingBins.delete(binId);
   }
 }

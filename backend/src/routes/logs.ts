@@ -1,11 +1,37 @@
 import { Router } from "express";
 
 import { AuditLog } from "../models/auditLog.js";
+import { Bin } from "../models/bin.js";
 
 import { authenticate } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
+import { auditFilter, redactAuditDetails, csvCell } from "../lib/auditView.js";
+import { thaiDateKey, thaiTimestamp } from "../lib/thaiTime.js";
 
 const router = Router();
+
+router.get("/export", authenticate, requireRole("admin"), async (req, res) => {
+  let filter;
+  try { filter = auditFilter(req.query); }
+  catch { return res.status(400).json({ success: false, error: { message: "ช่วงวันที่ไม่ถูกต้อง" } }); }
+  try {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="audit-logs-${thaiDateKey()}.csv"`);
+    res.write("\uFEFF" + ["Time (UTC+7)", "User", "Role", "Action", "Bin", "IP", "Details"].map(csvCell).join(",") + "\r\n");
+    const cursor = AuditLog.find(filter).sort({ timestamp: -1, _id: -1 }).lean().cursor();
+    try {
+      for await (const log of cursor) {
+        if (res.destroyed) break;
+        res.write([thaiTimestamp(new Date(log.timestamp)), log.email, log.role, log.action, log.binId, log.ip, JSON.stringify(redactAuditDetails(log.details))].map(csvCell).join(",") + "\r\n");
+      }
+    } finally { await cursor.close(); }
+    res.end();
+  } catch (error) {
+    console.error("Export audit logs failed:", error);
+    if (res.headersSent) res.destroy();
+    else res.status(500).json({ success: false, error: { message: "ไม่สามารถส่งออก Logs ได้" } });
+  }
+});
 
 /**
  * GET /api/logs
@@ -50,7 +76,9 @@ router.get(
         ? String(req.query.email)
         : undefined;
 
-      const filter: Record<string, string> = {};
+      let filter: Record<string, unknown>;
+      try { filter = auditFilter(req.query); }
+      catch { return res.status(400).json({ success: false, error: { message: "ช่วงวันที่ไม่ถูกต้อง" } }); }
 
       if (action) {
         filter.action = action;
@@ -70,7 +98,7 @@ router.get(
         AuditLog.find(
           filter as Record<string, unknown>
         )
-          .sort({ timestamp: -1 })
+          .sort({ timestamp: -1, _id: -1 })
           .skip(skip)
           .limit(limit)
           .lean(),
@@ -83,10 +111,12 @@ router.get(
       const totalPages = Math.ceil(
         total / limit
       );
+      const bins = await Bin.find({ binId: { $in: data.map(log => log.binId).filter((id): id is string => typeof id === "string") } }).select("binId name").lean();
+      const names = new Map(bins.map(bin => [bin.binId, bin.name]));
 
       return res.json({
         success: true,
-        data,
+        data: data.map(log => ({ ...log, binName: log.binId ? names.get(log.binId) || log.details?.name : undefined, details: redactAuditDetails(log.details) })),
 
         pagination: {
           page,
