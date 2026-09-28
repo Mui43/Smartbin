@@ -6,10 +6,6 @@ import {
   Wifi,
   WifiOff,
   Trash2,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Cpu,
   Plus,
 } from "lucide-react";
 
@@ -21,6 +17,7 @@ import SolarBattery from "@/components/dashboard/SolarBattery";
 import LockControl from "@/components/dashboard/LockControl";
 import WasteChart from "@/components/charts/WasteChart";
 import TelemetryTable from "@/components/dashboard/TelemetryTable";
+import SensorStatus from "@/components/dashboard/SensorStatus";
 
 import AlertBanner from "@/components/ui/AlertBanner";
 import Sidebar from "@/components/layout/Sidebar";
@@ -291,42 +288,7 @@ export default function Home() {
             </section>
 
             {/* Sensor Status */}
-            {activeTelemetry && (
-            <section className="mt-6 rounded-2xl border border-[#212b3d] bg-[#131822] p-5 shadow-xl sm:p-6">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
-                    Monitoring
-                  </p>
-
-                  <h2 className="mt-1 text-xl font-bold text-white">
-                    Sensor Status
-                  </h2>
-                </div>
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#212b3d] bg-[#0a0d14] text-slate-400">
-                  <Cpu size={20} className="shrink-0" />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Sensor
-                  name="Capacitive"
-                  status={activeTelemetry.sensorStatus?.capacitive || "offline"}
-                />
-
-                <Sensor
-                  name="Inductive"
-                  status={activeTelemetry.sensorStatus?.inductive || "offline"}
-                />
-
-                <Sensor
-                  name="Level"
-                  status={activeTelemetry.sensorStatus?.level || "offline"}
-                />
-              </div>
-            </section>
-            )}
+            <SensorStatus key={activeBinId} binId={activeBinId} accessToken={session?.user?.accessToken} telemetry={activeTelemetry} />
 
             {/* Telemetry Table */}
             <section className="mt-6">
@@ -336,66 +298,5 @@ export default function Home() {
         )}
       </div>
     </main>
-  );
-}
-
-/* =========================
-    Sensor Component
-========================= */
-
-function Sensor({ name, status }: { name: string; status: string }) {
-  const isOk = status === "ok";
-  const isWarning = status === "warning";
-  const isOffline = status === "offline";
-
-  const statusColor = isOk
-    ? "text-emerald-400"
-    : isWarning
-      ? "text-amber-400"
-      : isOffline
-        ? "text-slate-400"
-        : "text-rose-400";
-
-  const statusBackground = isOk
-    ? "bg-emerald-500/10 border-emerald-500/20"
-    : isWarning
-      ? "bg-amber-500/10 border-amber-500/20"
-      : isOffline
-        ? "bg-[#0a0d14] border-[#212b3d]"
-        : "bg-rose-500/10 border-rose-500/20";
-
-  return (
-    <div className="rounded-xl border border-[#212b3d] bg-[#0a0d14] p-4 transition duration-200 hover:border-slate-700">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-slate-300">{name}</p>
-
-        <span
-          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase ${statusBackground} ${statusColor}`}
-        >
-          {status}
-        </span>
-      </div>
-
-      <div className="mt-4 flex items-center gap-2.5">
-        {isOk && <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />}
-        {isWarning && (
-          <AlertTriangle size={16} className="shrink-0 text-amber-400" />
-        )}
-        {isOffline && <WifiOff size={16} className="shrink-0 text-slate-500" />}
-        {!isOk && !isWarning && !isOffline && (
-          <XCircle size={16} className="shrink-0 text-rose-400" />
-        )}
-
-        <p className={`font-semibold text-sm ${statusColor}`}>
-          {isOk
-            ? "Operational"
-            : isWarning
-              ? "Warning"
-              : isOffline
-                ? "Offline"
-                : "Error"}
-        </p>
-      </div>
-    </div>
   );
 }

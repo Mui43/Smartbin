@@ -36,6 +36,7 @@ export interface IDevice extends Document {
   lastSeen?: Date;
   state?: "on" | "off" | "unknown";
   pendingCommand?: "on" | "off" | "restart" | null;
+  pendingCommandAt?: Date | null;
   bootId?: string;
   lineCommand?: ILineCommand | null;
   metadata?: Record<string, unknown>;
@@ -107,6 +108,7 @@ const deviceSchema = new Schema<IDevice>(
       enum: ["on", "off", "restart"],
       default: null,
     },
+    pendingCommandAt: { type: Date, default: null },
 
     bootId: { type: String },
     lineCommand: {

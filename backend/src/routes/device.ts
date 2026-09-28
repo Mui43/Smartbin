@@ -96,6 +96,10 @@ router.get("/poll", async (req, res) => {
     }
     device.status = "online";
     device.lastSeen = new Date();
+    if ((device.type === "IR_SENSOR" || device.type === "PROXIMITY_SENSOR") &&
+        (req.query.state === "on" || req.query.state === "off")) {
+      device.state = req.query.state;
+    }
     await device.save();
     broadcastDevice(device);
 
@@ -191,8 +195,10 @@ router.post("/report", async (req, res) => {
       device.state = state;
       device.status = "online";
       device.lastSeen = new Date();
-      if (device.pendingCommand === state && !device.lineCommand)
+      if (device.pendingCommand === state && !device.lineCommand) {
         device.pendingCommand = null;
+        device.pendingCommandAt = null;
+      }
       await device.save();
     }
     broadcastDevice(confirmed || device);

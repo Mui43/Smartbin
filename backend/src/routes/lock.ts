@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { Bin } from "../models/bin.js";
 import { Device } from "../models/device.js";
-import { Command } from "../models/command.js";
 import { authenticate } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createAuditLog } from "../services/auditLog.js";
@@ -54,22 +53,21 @@ router.post(
       if (device.status !== "online" || !device.lastSeen || Date.now() - device.lastSeen.getTime() > 60000) {
         return res.status(409).json({ success: false, error: { message: "Servo Lock ออฟไลน์ กรุณาตรวจ ESP32" } });
       }
-      const command = await Command.create({
-        binId,
-        deviceId: device.deviceId,
-        action,
-        source: "web",
-        status: "pending",
-        requestedBy: {
-          id: req.user?.id,
-          email: req.user?.email,
-          role: req.user?.role,
-        },
-      });
-      device.pendingCommand = action === "lock" ? "on" : "off";
-      await device.save();
+      if (device.pendingCommand || device.lineCommand) {
+        return res.status(409).json({ success: false, error: { message: "มีคำสั่งก่อนหน้ารออุปกรณ์ยืนยันอยู่" } });
+      }
+      const desired = action === "lock" ? "on" : "off";
+      const requestedAt = new Date();
+      const queued = await Device.findOneAndUpdate(
+        { _id: device._id, pendingCommand: null, lineCommand: null, status: "online", lastSeen: { $gt: new Date(requestedAt.getTime() - 60_000) } },
+        { $set: { pendingCommand: desired, pendingCommandAt: requestedAt } },
+        { new: true },
+      );
+      if (!queued) {
+        return res.status(409).json({ success: false, error: { message: "สถานะอุปกรณ์เปลี่ยนหรือมีคำสั่งอื่นเข้ามาก่อน กรุณาลองใหม่" } });
+      }
 
-      await createAuditLog({
+      void createAuditLog({
         req,
         action:
           action === "lock"
@@ -85,13 +83,12 @@ router.post(
               ? "Lock command sent"
               : "Unlock command sent",
         },
-      });
+      }).catch(error => console.error("Lock audit log failed:", error));
 
       res.json({
         success: true,
         data: {
           binId,
-          commandId: command.id,
           action,
           requestedBy: {
             id: req.user?.id,

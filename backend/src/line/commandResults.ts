@@ -51,7 +51,7 @@ export async function confirmServoCommand(device: IDevice, state: "on" | "off") 
   const updated = await Device.findOneAndUpdate(
     { _id: device._id, pendingCommand: state, "lineCommand.action": action, "lineCommand.phase": "queued", "lineCommand.requestedAt": command.requestedAt },
     { $set: {
-      state, status: "online", lastSeen: new Date(), pendingCommand: null,
+      state, status: "online", lastSeen: new Date(), pendingCommand: null, pendingCommandAt: null,
       "lineCommand.phase": "result",
       "lineCommand.resultText": `✅ ${verb}ถัง ${command.binName} สำเร็จ: ESP32 รายงานสถานะ Servo Lock เป็น ${state === "on" ? "ล็อก" : "ปลดล็อก"}`,
     } },
@@ -94,6 +94,14 @@ export async function cancelLineCommand(device: IDevice) {
 
 /** Convert expired commands into failure results and attempt delivery of outstanding results. */
 async function checkPendingLineCommands() {
+  await Device.updateMany(
+    { lineCommand: null, pendingCommand: { $in: ["on", "off"] }, pendingCommandAt: null },
+    { $set: { pendingCommandAt: new Date() } },
+  );
+  await Device.updateMany(
+    { lineCommand: null, pendingCommand: { $in: ["on", "off"] }, pendingCommandAt: { $lte: new Date(Date.now() - 30_000) } },
+    { $set: { pendingCommand: null, pendingCommandAt: null } },
+  );
   const expired = await Device.find({ "lineCommand.phase": { $in: ["queued", "restarting"] }, "lineCommand.deadlineAt": { $lte: new Date() } });
   for (const device of expired) {
     const command = device.lineCommand as ILineCommand;

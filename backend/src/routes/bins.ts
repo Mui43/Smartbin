@@ -1,21 +1,12 @@
 import { Router } from "express";
 import { thaiDateFilter } from "../lib/thaiTime.js";
 import { Bin } from "../models/bin.js";
-import { Device } from "../models/device.js"; // 1. เพิ่ม import Device
-import { Command } from "../models/command.js"; // 2. แก้ path ให้ถูกต้อง
 import { Telemetry } from "../models/telemetry.js";
 import { authenticate } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createAuditLog } from "../services/auditLog.js";
 
 const router = Router();
-
-// Helper สำหรับหาอุปกรณ์ Servo Lock ของถังนั้นๆ
-const lockDeviceFilter = (binId: string) => ({
-  binId,
-  type: "SERVO_MOTOR" as const,
-  deviceId: /^servo-lock-/i,
-});
 
 /**
  * GET /api/bins
@@ -29,6 +20,7 @@ router.get("/", authenticate, async (_req, res) => {
       bins.map(async (bin) => {
         const latestTelemetry = await Telemetry.findOne({
           binId: bin.binId,
+          timestamp: { $lte: new Date() },
         })
           .sort({ timestamp: -1 })
           .lean();
@@ -122,109 +114,6 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
     });
   }
 });
-
-/**
- * POST /api/bins/:id/lock
- * ส่งคำสั่ง Lock / Unlock ไปยังคิว Command
- */
-router.post(
-  "/:id/lock",
-  authenticate,
-  requireRole("admin", "staff"),
-  async (req, res) => {
-    try {
-      const binId = String(req.params.id);
-      const { action } = req.body;
-
-      if (action !== "lock" && action !== "unlock") {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: "INVALID_LOCK_ACTION",
-            message: "Action must be lock or unlock",
-          },
-        });
-      }
-
-      const bin = await Bin.findOne({ binId });
-      if (!bin) {
-        return res.status(404).json({
-          success: false,
-          error: { code: "BIN_NOT_FOUND", message: "Bin not found" },
-        });
-      }
-
-      const device = await Device.findOne(lockDeviceFilter(binId));
-      if (!device) {
-        return res.status(404).json({
-          success: false,
-          error: { message: "ไม่พบ Servo Lock ที่ลงทะเบียนกับถังนี้" },
-        });
-      }
-
-      if (
-        device.status !== "online" ||
-        !device.lastSeen ||
-        Date.now() - device.lastSeen.getTime() > 60000
-      ) {
-        return res.status(409).json({
-          success: false,
-          error: { message: "Servo Lock ออฟไลน์ กรุณาตรวจ ESP32" },
-        });
-      }
-
-      // บันทึกคำสั่งลงคอลเลกชัน commands
-      await Command.create({
-        binId,
-        deviceId: device.deviceId,
-        action,
-        source: "web",
-        status: "pending",
-        requestedBy: {
-          id: req.user?.id,
-          email: req.user?.email,
-          role: req.user?.role,
-        },
-      });
-
-      await createAuditLog({
-        req,
-        action: action === "lock" ? "LOCK" : "UNLOCK",
-        binId,
-        details: {
-          action,
-          deviceId: device.deviceId,
-          delivery: "device-poll",
-          message:
-            action === "lock" ? "Lock command queued" : "Unlock command queued",
-        },
-      });
-
-      res.json({
-        success: true,
-        data: {
-          binId,
-          action,
-          requestedBy: {
-            id: req.user?.id,
-            email: req.user?.email,
-            role: req.user?.role,
-          },
-          timestamp: new Date().toISOString(),
-        },
-      });
-    } catch (error) {
-      console.error("Lock API error:", error);
-      res.status(500).json({
-        success: false,
-        error: {
-          code: "LOCK_COMMAND_FAILED",
-          message: "Unable to send lock command",
-        },
-      });
-    }
-  },
-);
 
 /**
  * PUT /api/bins/:id
@@ -365,7 +254,8 @@ router.get("/:id/telemetry", authenticate, async (req, res) => {
 
     const filter = {
       binId,
-      ...(Object.keys(timestamp).length ? { timestamp } : {}),
+      // Ignore records written with an invalid future device clock.
+      timestamp: { ...timestamp, $lte: new Date() },
     };
     const skip = (page - 1) * limit;
 
