@@ -20,13 +20,23 @@ import {
   PlusCircle,
   Edit,
   Loader2,
+  Filter,
+  Download,
 } from "lucide-react";
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import Swal from "sweetalert2";
 
-const actionLabels: Record<string, string> = { LOGIN: "เข้าสู่ระบบ", LOGIN_FAILED: "เข้าสู่ระบบไม่สำเร็จ", CREATE_BIN: "เพิ่มถังขยะ", UPDATE_BIN: "แก้ไขถังขยะ", DELETE_BIN: "ลบถังขยะ", LOCK: "ส่งคำสั่งล็อก", UNLOCK: "ส่งคำสั่งปลดล็อก" };
+const actionLabels: Record<string, string> = {
+  LOGIN: "เข้าสู่ระบบ",
+  LOGIN_FAILED: "เข้าสู่ระบบไม่สำเร็จ",
+  CREATE_BIN: "เพิ่มถังขยะ",
+  UPDATE_BIN: "แก้ไขถังขยะ",
+  DELETE_BIN: "ลบถังขยะ",
+  LOCK: "ส่งคำสั่งล็อก",
+  UNLOCK: "ส่งคำสั่งปลดล็อก",
+};
 
 interface AuditLog {
   _id: string;
@@ -71,9 +81,17 @@ export default function LogsPage() {
   const [binId, setBinId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  // State สำหรับเปิด/ปิด Filter Panel
+  const [showFilters, setShowFilters] = useState(false);
+
   const [exporting, setExporting] = useState(false);
   const accessToken = session?.user?.accessToken;
   const invalidRange = Boolean(startDate && endDate && startDate > endDate);
+
+  // นับจำนวน Filter ที่กำลังใช้งานอยู่ (ไม่รวม Bin ID)
+  const activeFiltersCount =
+    (action ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0);
 
   function filterParams() {
     const params = new URLSearchParams();
@@ -88,7 +106,10 @@ export default function LogsPage() {
     if (!accessToken || invalidRange) return;
     setExporting(true);
     try {
-      const response = await fetch(`${API_URL}/api/logs/export?${filterParams()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const response = await fetch(
+        `${API_URL}/api/logs/export?${filterParams()}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
       if (!response.ok) throw new Error("ไม่สามารถส่งออก Logs ได้");
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
@@ -96,8 +117,13 @@ export default function LogsPage() {
       link.download = "audit-logs.csv";
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) { setError(error instanceof Error ? error.message : "ไม่สามารถส่งออก Logs ได้"); }
-    finally { setExporting(false); }
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "ไม่สามารถส่งออก Logs ได้",
+      );
+    } finally {
+      setExporting(false);
+    }
   }
 
   const [loading, setLoading] = useState(true);
@@ -116,7 +142,10 @@ export default function LogsPage() {
     const controller = abortControllerRef.current;
     if (invalidRange) {
       setError("วันที่เริ่มต้นต้องไม่อยู่หลังวันที่สิ้นสุด");
-      setLogs([]); setPagination(null); setLoading(false); setIsInitialLoad(false);
+      setLogs([]);
+      setPagination(null);
+      setLoading(false);
+      setIsInitialLoad(false);
       return;
     }
 
@@ -141,7 +170,8 @@ export default function LogsPage() {
       if (controller.signal.aborted) return;
 
       if (!response.ok || !result.success) {
-        setLogs([]); setPagination(null);
+        setLogs([]);
+        setPagination(null);
         setError(result?.error?.message || "ไม่สามารถโหลด Audit Logs ได้");
         return;
       }
@@ -167,12 +197,22 @@ export default function LogsPage() {
       loadLogs();
     }
     return () => abortControllerRef.current?.abort();
-  }, [status, accessToken, session?.user.role, page, action, binId, startDate, endDate]);
+  }, [
+    status,
+    accessToken,
+    session?.user.role,
+    page,
+    action,
+    binId,
+    startDate,
+    endDate,
+  ]);
 
   function resetFilter() {
     setAction("");
     setBinId("");
-    setStartDate(""); setEndDate("");
+    setStartDate("");
+    setEndDate("");
     setPage(1);
   }
 
@@ -197,7 +237,9 @@ export default function LogsPage() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-900/50 bg-rose-950/30 text-rose-400">
             <ShieldAlert className="h-7 w-7" />
           </div>
-          <h1 className="mt-4 text-xl font-bold text-white">ไม่มีสิทธิ์เข้าถึง</h1>
+          <h1 className="mt-4 text-xl font-bold text-white">
+            ไม่มีสิทธิ์เข้าถึง
+          </h1>
           <p className="mt-2 text-sm text-slate-400">
             หน้านี้สำหรับผู้ดูแลระบบ (Admin) เท่านั้น
           </p>
@@ -212,88 +254,163 @@ export default function LogsPage() {
 
       <div className="p-4 pt-20 sm:p-6 sm:pt-20 lg:ml-64 lg:p-8">
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        {/* Page Header */}
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
-              System Operations
-            </span>
+          {/* Page Header */}
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
+                System Operations
+              </span>
+            </div>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              Audit Logs
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              ประวัติการใช้งานและการทำงานของระบบย้อนหลัง • เวลาประเทศไทย (UTC+7)
+            </p>
           </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Audit Logs
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            ประวัติการใช้งานและการทำงานของระบบย้อนหลัง • เวลาประเทศไทย (UTC+7)
-          </p>
+
+          <Header hideTitle />
         </div>
 
-        <Header hideTitle />
-        </div>
-
-        {/* Filter Section */}
-        <div className="mb-6 rounded-2xl border border-[#212b3d] bg-[#131822] p-5 shadow-xl">
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {/* Action Select */}
-            <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">
-                Action
-              </label>
-              <select
-                value={action}
+        {/* Clean Filter Section */}
+        <div className="mb-6 space-y-3">
+          {/* Top Bar: Search & Actions */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            {/* Primary Search Bar */}
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={binId}
                 onChange={(e) => {
-                  setAction(e.target.value);
+                  setBinId(e.target.value);
                   setPage(1);
                 }}
-                className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-3 text-sm text-white outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
-              >
-                <option value="">ทุกเหตุการณ์</option>
-                {Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
+                placeholder="ค้นหาด้วย Bin ID เช่น A-001..."
+                className="h-12 w-full rounded-2xl border border-[#212b3d] bg-[#131822] py-2 pl-12 pr-4 text-sm text-white placeholder-slate-500 outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+              />
             </div>
 
-            {/* Bin ID Input */}
-            <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">
-                Bin ID
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={binId}
-                  onChange={(e) => {
-                    setBinId(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="เช่น A-001"
-                  className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] py-3 pl-10 pr-3 text-sm text-white placeholder-slate-600 outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
-                />
-                <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
-              </div>
-            </div>
-
-            {[{ label: "ตั้งแต่วันที่", value: startDate, set: setStartDate }, { label: "ถึงวันที่", value: endDate, set: setEndDate }].map(field => (
-              <label key={field.label} className="text-xs text-slate-400">{field.label}
-                <input type="date" value={field.value} onChange={event => { field.set(event.target.value); setPage(1); }} className="mt-2 w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-3 text-sm text-white [color-scheme:dark]" />
-              </label>
-            ))}
-            <div className="flex items-end gap-2">
-              <button onClick={loadLogs} disabled={loading || invalidRange} className="rounded-xl border border-[#212b3d] p-3 text-sm transition hover:bg-[#212b3d] disabled:opacity-40">รีเฟรช</button>
-              <button onClick={exportLogs} disabled={exporting || invalidRange || loading} className="rounded-xl border border-[#212b3d] p-3 text-sm transition hover:bg-[#212b3d] disabled:opacity-40">{exporting ? "กำลังส่งออก…" : "ส่งออก CSV"}</button>
-            </div>
-
-            {/* Reset Button */}
-            <div className="flex items-end sm:col-span-2 md:col-span-1">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
               <button
-                type="button"
-                onClick={resetFilter}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#212b3d] bg-[#0a0d14] p-3 text-sm font-semibold text-slate-300 transition hover:bg-[#212b3d] hover:text-white active:scale-[0.98]"
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex h-12 items-center gap-2 rounded-2xl border px-4 text-sm font-medium transition ${
+                  showFilters || activeFiltersCount > 0
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                    : "border-[#212b3d] bg-[#131822] text-slate-300 hover:bg-[#212b3d]"
+                }`}
               >
-                <RotateCcw className="h-4 w-4" />
-                <span>ล้างตัวกรอง</span>
+                <Filter className="h-4 w-4" />
+                <span>ตัวกรอง</span>
+                {activeFiltersCount > 0 && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={loadLogs}
+                disabled={loading || invalidRange}
+                className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#212b3d] bg-[#131822] text-slate-300 transition hover:bg-[#212b3d] disabled:opacity-40"
+                title="รีเฟรชข้อมูล"
+              >
+                <RotateCcw
+                  className={`h-4 w-4 ${loading && !isInitialLoad ? "animate-spin" : ""}`}
+                />
+              </button>
+
+              <button
+                onClick={exportLogs}
+                disabled={
+                  exporting || invalidRange || loading || logs.length === 0
+                }
+                className="flex h-12 items-center gap-2 rounded-2xl border border-[#212b3d] bg-[#131822] px-4 text-sm font-medium text-slate-300 transition hover:bg-[#212b3d] hover:text-white disabled:opacity-40"
+              >
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Export CSV</span>
               </button>
             </div>
           </div>
+
+          {/* Expandable Advanced Filters */}
+          {showFilters && (
+            <div className="animate-in fade-in slide-in-from-top-2 rounded-2xl border border-[#212b3d] bg-[#131822] p-5 shadow-xl">
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                {/* Action Select */}
+                <div className="md:col-span-1">
+                  <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">
+                    Action
+                  </label>
+                  <select
+                    value={action}
+                    onChange={(e) => {
+                      setAction(e.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-2.5 text-sm text-white outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
+                  >
+                    <option value="">ทุกเหตุการณ์</option>
+                    {Object.entries(actionLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Start Date */}
+                <div className="md:col-span-1">
+                  <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">
+                    ตั้งแต่วันที่
+                  </label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-2.5 text-sm text-white [color-scheme:dark] outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+
+                {/* End Date */}
+                <div className="md:col-span-1">
+                  <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">
+                    ถึงวันที่
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-[#212b3d] bg-[#0a0d14] p-2.5 text-sm text-white [color-scheme:dark] outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+
+                {/* Reset Button */}
+                <div className="flex items-end md:col-span-1">
+                  <button
+                    type="button"
+                    onClick={resetFilter}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/5 p-2.5 text-sm font-semibold text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    <span>ล้างตัวกรองทั้งหมด</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Error Message */}
@@ -378,12 +495,18 @@ export default function LogsPage() {
                         <td className="px-5 py-4">
                           <ActionBadge action={log.action} />
                         </td>
-                        <td className="px-5 py-4"><OutcomeBadge log={log} /></td>
+                        <td className="px-5 py-4">
+                          <OutcomeBadge log={log} />
+                        </td>
                         <td className="px-5 py-4 font-mono text-slate-300">
                           {log.binId ? (
                             <span className="rounded-lg border border-[#212b3d] bg-[#0a0d14] px-2.5 py-1 text-xs">
                               {log.binId}
-                              {log.binName && <span className="ml-2 font-sans">{log.binName}</span>}
+                              {log.binName && (
+                                <span className="ml-2 font-sans">
+                                  {log.binName}
+                                </span>
+                              )}
                             </span>
                           ) : (
                             "-"
@@ -393,7 +516,24 @@ export default function LogsPage() {
                           {log.ip || "-"}
                         </td>
                         <td className="max-w-xs px-5 py-4 text-xs text-slate-400">
-                          <button onClick={() => void Swal.fire({ title: actionLabels[log.action] || log.action, text: `${formatDate(log.timestamp)}\nผู้ดำเนินการ: ${log.email || "ระบบ"}\nถัง: ${log.binName || log.binId || "—"}\nIP: ${log.ip || "—"}\nอุปกรณ์ผู้ใช้: ${log.userAgent || "—"}\n\n${detailText(log.details)}`, confirmButtonText: "ปิด", background: "#131822", color: "#fff", customClass: { htmlContainer: "!whitespace-pre-wrap !text-left !text-sm" } })} className="rounded-lg border border-[#212b3d] px-3 py-2 text-slate-300 transition hover:bg-[#212b3d]">ดูรายละเอียด</button>
+                          <button
+                            onClick={() =>
+                              void Swal.fire({
+                                title: actionLabels[log.action] || log.action,
+                                text: `${formatDate(log.timestamp)}\nผู้ดำเนินการ: ${log.email || "ระบบ"}\nถัง: ${log.binName || log.binId || "—"}\nIP: ${log.ip || "—"}\nอุปกรณ์ผู้ใช้: ${log.userAgent || "—"}\n\n${detailText(log.details)}`,
+                                confirmButtonText: "ปิด",
+                                background: "#131822",
+                                color: "#fff",
+                                customClass: {
+                                  htmlContainer:
+                                    "!whitespace-pre-wrap !text-left !text-sm",
+                                },
+                              })
+                            }
+                            className="rounded-lg border border-[#212b3d] px-3 py-2 text-slate-300 transition hover:bg-[#212b3d]"
+                          >
+                            ดูรายละเอียด
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -450,24 +590,57 @@ export default function LogsPage() {
 /* ==================================================
    Sub Components & UI Badges
 ================================================== */
-
 function OutcomeBadge({ log }: { log: AuditLog }) {
-  const failed = log.action === "LOGIN_FAILED" || log.details?.success === false;
+  const failed =
+    log.action === "LOGIN_FAILED" || log.details?.success === false;
   const command = log.action === "LOCK" || log.action === "UNLOCK";
   const label = failed ? "ล้มเหลว" : command ? "ส่งคำสั่งแล้ว" : "สำเร็จ";
-  return <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs ${failed ? "bg-rose-500/10 text-rose-400" : command ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>{label}</span>;
+  return (
+    <span
+      className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs ${failed ? "bg-rose-500/10 text-rose-400" : command ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}
+    >
+      {label}
+    </span>
+  );
 }
 
 function detailText(details?: Record<string, unknown>) {
   if (!details) return "ไม่มีรายละเอียดเพิ่มเติม";
-  const labels: Record<string, string> = { name: "ชื่อถัง", location: "สถานที่", mqttTopic: "MQTT Topic", thresholdPct: "เกณฑ์ใกล้เต็ม (%)", reason: "สาเหตุ", message: "ข้อความ", action: "คำสั่ง" };
-  const reasons: Record<string, string> = { USER_NOT_FOUND: "ไม่พบผู้ใช้", USER_INACTIVE: "บัญชีถูกระงับ", INVALID_PASSWORD: "รหัสผ่านไม่ถูกต้อง" };
-  const show = (value: unknown) => typeof value === "string" ? reasons[value] || value : JSON.stringify(value) ?? "—";
-  if (details.before && details.after && typeof details.before === "object" && typeof details.after === "object") {
+  const labels: Record<string, string> = {
+    name: "ชื่อถัง",
+    location: "สถานที่",
+    mqttTopic: "MQTT Topic",
+    thresholdPct: "เกณฑ์ใกล้เต็ม (%)",
+    reason: "สาเหตุ",
+    message: "ข้อความ",
+    action: "คำสั่ง",
+  };
+  const reasons: Record<string, string> = {
+    USER_NOT_FOUND: "ไม่พบผู้ใช้",
+    USER_INACTIVE: "บัญชีถูกระงับ",
+    INVALID_PASSWORD: "รหัสผ่านไม่ถูกต้อง",
+  };
+  const show = (value: unknown) =>
+    typeof value === "string"
+      ? reasons[value] || value
+      : (JSON.stringify(value) ?? "—");
+  if (
+    details.before &&
+    details.after &&
+    typeof details.before === "object" &&
+    typeof details.after === "object"
+  ) {
     const before = details.before as Record<string, unknown>;
-    return Object.entries(details.after).map(([key, value]) => `${labels[key] || key}: ${show(before[key])} → ${show(value)}`).join("\n");
+    return Object.entries(details.after)
+      .map(
+        ([key, value]) =>
+          `${labels[key] || key}: ${show(before[key])} → ${show(value)}`,
+      )
+      .join("\n");
   }
-  return Object.entries(details).map(([key, value]) => `${labels[key] || key}: ${show(value)}`).join("\n");
+  return Object.entries(details)
+    .map(([key, value]) => `${labels[key] || key}: ${show(value)}`)
+    .join("\n");
 }
 
 function RoleBadge({ role }: { role?: string }) {
@@ -553,7 +726,6 @@ function EmptyLogs() {
 /* ==================================================
    Skeleton Loaders
 ================================================== */
-
 function TableSkeleton() {
   return (
     <div className="overflow-x-auto">
@@ -620,7 +792,6 @@ function PageSkeleton() {
 /* ==================================================
    Helper Functions
 ================================================== */
-
 function formatDate(timestamp: string) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "-";
