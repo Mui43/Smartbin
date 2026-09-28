@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { sendLineMessage, replyLineMessage } from "../services/line.js";
 import { Bin } from "../models/bin.js";
 import { Command } from "../models/command.js";
+import { Device } from "../models/device.js";
 import {
   createBinCarouselFlex,
   getQuickReplyMenu,
@@ -160,8 +161,14 @@ router.post(
               continue;
             }
 
+            const lockDevice = await Device.findOne({
+              binId: targetBinId,
+              type: "SERVO_MOTOR",
+              deviceId: /^servo-lock-/i,
+            });
             await Command.create({
               binId: targetBinId,
+              ...(lockDevice ? { deviceId: lockDevice.deviceId } : {}),
               action: action,
               source: "line",
               status: "pending",
@@ -171,6 +178,10 @@ router.post(
                 role: "line_user",
               },
             });
+            if (lockDevice) {
+              lockDevice.pendingCommand = action === "lock" ? "on" : "off";
+              await lockDevice.save();
+            }
 
             const isLock = action === "lock";
             const messageText = isLock
