@@ -31,14 +31,31 @@ const char* DEVICE_API_KEY = "smartbin-A001-9fK2xP7mQ4vL8sT1";
 // Device IDs
 // =====================================================
 
-const char* ESP32_DEVICE_ID = "ESP32-A001";
-const char* IR_DEVICE_ID = "IR-A001";
-const char* PROXIMITY_DEVICE_ID = "proximity-A001";
-const char* ULTRASONIC_DEVICE_ID = "ultrasonic-A001";
-const char* SERVO_CAN_DEVICE_ID = "servo-can-A001";
-const char* SERVO_LOCK_DEVICE_ID = "servo-lock-A001";
-const char* RELAY_CAN_DEVICE_ID = "relay-can-A001";
-const char* RELAY_LOCK_DEVICE_ID = "relay-lock-A001";
+const char* ESP32_DEVICE_ID =
+  "ESP32-A001";
+
+String bootId;
+
+const char* IR_DEVICE_ID =
+  "IR-A001";
+
+const char* PROXIMITY_DEVICE_ID =
+  "proximity-A001";
+
+const char* ULTRASONIC_DEVICE_ID =
+  "ultrasonic-A001";
+
+const char* SERVO_CAN_DEVICE_ID =
+  "servo-can-A001";
+
+const char* SERVO_LOCK_DEVICE_ID =
+  "servo-lock-A001";
+
+const char* RELAY_CAN_DEVICE_ID =
+  "relay-can-A001";
+
+const char* RELAY_LOCK_DEVICE_ID =
+  "relay-lock-A001";
 
 // =====================================================
 // MQTT Topics
@@ -199,8 +216,29 @@ void connectMQTT() {
 // Device Heartbeat
 // =====================================================
 
-void sendDeviceHeartbeat(const char* deviceId) {
-  if (WiFi.status() != WL_CONNECTED) {
+bool acknowledgeRestart() {
+  HTTPClient acknowledgement;
+  acknowledgement.setConnectTimeout(1000);
+  acknowledgement.setTimeout(1500);
+  acknowledgement.begin(String(SERVER_URL) + "/api/device/ack-restart");
+  acknowledgement.addHeader("Content-Type", "application/json");
+  acknowledgement.addHeader("x-api-key", DEVICE_API_KEY);
+  const String payload = String("{\"deviceId\":\"") + ESP32_DEVICE_ID + "\"}";
+  const int status = acknowledgement.POST(payload);
+  if (status != 200) Serial.printf("Restart acknowledgement failed: %d\n", status);
+  acknowledgement.end();
+  return status == 200;
+}
+
+void sendDeviceHeartbeat(
+  const char* deviceId
+) {
+
+  if (
+    WiFi.status() !=
+    WL_CONNECTED
+  ) {
+
     return;
   }
 
@@ -209,14 +247,25 @@ void sendDeviceHeartbeat(const char* deviceId) {
   http.setConnectTimeout(1000);
   http.setTimeout(1000);
 
-  String url = String(SERVER_URL) + "/api/device/poll?deviceId=" + deviceId;
+  String url =
+    String(SERVER_URL) +
+    "/api/device/poll?deviceId=" +
+    deviceId;
+  if (String(deviceId) == ESP32_DEVICE_ID) url += "&bootId=" + bootId;
 
   http.begin(url);
   http.addHeader("x-api-key", DEVICE_API_KEY);
 
   int httpCode = http.GET();
 
-  // รับคำสั่ง Lock/Unlock
+  bool restartRequested = false;
+  if (httpCode == 200 && String(deviceId) == ESP32_DEVICE_ID) {
+    String response = http.getString();
+    response.replace(" ", "");
+    response.replace("\n", "");
+    restartRequested = response.indexOf("\"command\":\"restart\"") >= 0;
+  }
+
   if (httpCode == 200 && String(deviceId) == SERVO_LOCK_DEVICE_ID) {
     String response = http.getString();
     response.replace(" ", "");
@@ -248,6 +297,12 @@ void sendDeviceHeartbeat(const char* deviceId) {
   }
 
   http.end();
+  if (restartRequested && acknowledgeRestart()) {
+    Serial.println("Restart command acknowledged; restarting ESP32");
+    Serial.flush();
+    delay(100);
+    ESP.restart();
+  }
 }
 
 // =====================================================
@@ -345,6 +400,10 @@ void setup() {
 
   pinMode(PROXI_PIN, INPUT);
   pinMode(IR_PIN, INPUT);
+  Serial.begin(
+    115200
+  );
+  bootId = String(esp_random(), HEX);
 
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, HIGH);

@@ -16,6 +16,7 @@ import realtimeRouter from "./routes/realtime.js";
 import lockRouter from "./routes/lock.js";
 import alertsRouter from "./routes/alerts.js";
 import lineRouter from "./routes/line.js";
+import { startLineCommandChecker } from "./line/commandResults.js";
 import authRouter from "./routes/auth.js";
 import logsRouter from "./routes/logs.js";
 import exportRouter from "./routes/export.js";
@@ -31,8 +32,23 @@ const PORT = Number(process.env.PORT) || 4000;
 // Middlewares
 // ==================================
 app.use(helmet());
-app.use(cors({ origin: true }));
-app.use(express.json()); // อ่าน JSON Body สำหรับทุก Route รวมถึง LINE Webhook
+
+app.use(
+  cors({
+    origin: true,
+  }),
+);
+
+app.use(
+  express.json({
+    verify: (req, _res, buffer) => {
+      if (req.url?.startsWith("/api/line/webhook"))
+        (req as express.Request & { rawBody?: Buffer }).rawBody =
+          Buffer.from(buffer);
+    },
+  }),
+);
+
 app.use(pinoHttp());
 
 // ==================================
@@ -84,6 +100,7 @@ async function startServer() {
 
     startMqtt();
     startAlertChecker();
+    startLineCommandChecker();
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Backend running on port ${PORT}`);
