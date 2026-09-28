@@ -6,16 +6,15 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 
 import { connectDatabase } from "./config/database.js";
-import { startAlertChecker } from "./alerts/notifyAlerts.js";
-import { startMqtt } from "./mqtt/client.js";
 
-// Import Routes ทั้งหมด (ไม่ซ้ำกัน)
 import healthRouter from "./routes/health.js";
 import binsRouter from "./routes/bins.js";
 import realtimeRouter from "./routes/realtime.js";
 import lockRouter from "./routes/lock.js";
 import alertsRouter from "./routes/alerts.js";
 import lineRouter from "./routes/line.js";
+import { startAlertChecker } from "./alerts/notifyAlerts.js";
+import { startLineCommandChecker } from "./line/commandResults.js";
 import authRouter from "./routes/auth.js";
 import logsRouter from "./routes/logs.js";
 import exportRouter from "./routes/export.js";
@@ -24,20 +23,36 @@ import deviceRouter from "./routes/device.js";
 import wasteStatsRouter from "./routes/wasteStats.js";
 import deviceHeartbeatRouter from "./routes/deviceHeartbeat.js";
 
+import { startMqtt } from "./mqtt/client.js";
+
 const app = express();
+
 const PORT = Number(process.env.PORT) || 4000;
 
-// ==================================
-// Middlewares
-// ==================================
 app.use(helmet());
-app.use(cors({ origin: true }));
-app.use(express.json()); // อ่าน JSON Body สำหรับทุก Route รวมถึง LINE Webhook
+
+app.use(
+  cors({
+    origin: true,
+  }),
+);
+
+app.use(
+  express.json({
+    verify: (req, _res, buffer) => {
+      if (req.url?.startsWith("/api/line/webhook"))
+        (req as express.Request & { rawBody?: Buffer }).rawBody =
+          Buffer.from(buffer);
+    },
+  }),
+);
+
 app.use(pinoHttp());
 
 // ==================================
-// Root Route
+// Root
 // ==================================
+
 app.get("/", (_req, res) => {
   res.json({
     success: true,
@@ -46,25 +61,39 @@ app.get("/", (_req, res) => {
 });
 
 // ==================================
-// API Routes
+// Routes
 // ==================================
+
 app.use("/api/health", healthRouter);
+
 app.use("/api/bins", binsRouter);
-app.use("/api/bins", lockRouter);
+
 app.use("/api/realtime", realtimeRouter);
+
+app.use("/api/bins", lockRouter);
+
 app.use("/api/alerts", alertsRouter);
-app.use("/api/line", lineRouter); // 🟢 LINE Webhook อยู่ตรงนี้จุดเดียว
+
+app.use("/api/line", lineRouter);
+
 app.use("/api/auth", authRouter);
+
 app.use("/api/logs", logsRouter);
+
 app.use("/api/export", exportRouter);
+
 app.use("/api/dashboard", dashboardRouter);
+
 app.use("/api/waste-stats", wasteStatsRouter);
+
 app.use("/api/device", deviceRouter);
+
 app.use("/api/device/heartbeat", deviceHeartbeatRouter);
 
 // ==================================
-// 404 Handler
+// 404
 // ==================================
+
 app.use((_req, res) => {
   res.status(404).json({
     success: false,
@@ -78,18 +107,22 @@ app.use((_req, res) => {
 // ==================================
 // Start Server
 // ==================================
+
+/** Connect to MongoDB, start MQTT and background checkers, then listen for HTTP requests; exit on startup failure. */
 async function startServer() {
   try {
     await connectDatabase();
 
     startMqtt();
     startAlertChecker();
+    startLineCommandChecker();
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Backend running on port ${PORT}`);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);
+
     process.exit(1);
   }
 }
