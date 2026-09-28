@@ -8,6 +8,7 @@ import { cancelLineCommand } from "../line/commandResults.js";
 
 const router = Router();
 
+/** Verify the LINE HMAC against the raw request body, rejecting missing or invalid signatures with 401. */
 export function verifyLineSignature(req: Request, res: Response, next: NextFunction) {
   const secret = process.env.LINE_CHANNEL_SECRET?.trim();
   const signature = req.header("x-line-signature");
@@ -21,6 +22,7 @@ export function verifyLineSignature(req: Request, res: Response, next: NextFunct
   next();
 }
 
+/** Return a supported action from a text or postback event, or null for unrecognized input. */
 export function parseLineAction(event: any) {
   const raw = event?.type === "postback" ? event.postback?.data
     : event?.type === "message" && event.message?.type === "text" ? event.message.text : "";
@@ -34,11 +36,13 @@ export function parseLineAction(event: any) {
   return null;
 }
 
+/** Extract the bin ID from postback data, or return null when absent or not a postback. */
 function postbackBinId(event: any) {
   if (event?.type !== "postback") return null;
   return new URLSearchParams(String(event.postback?.data || "")).get("binId");
 }
 
+/** Return the source group, room, or user ID for result delivery, or null if unavailable. */
 function replyDestination(event: any): string | null {
   const source = event?.source;
   if (source?.type === "group") return source.groupId || null;
@@ -46,6 +50,10 @@ function replyDestination(event: any): string | null {
   return source?.userId || null;
 }
 
+/**
+ * Validate device readiness and atomically queue a command with its LINE recipient and deadline.
+ * Reply with the rejection reason, existing state, or acknowledgement that confirmation is pending.
+ */
 async function queueDeviceCommand(event: any, replyToken: string, device: InstanceType<typeof Device> | null, action: "lock" | "unlock" | "restart", binName: string) {
   const verb = action === "lock" ? "ล็อกถัง" : action === "unlock" ? "ปลดล็อกถัง" : "รีสตาร์ต ESP32";
   if (!device) return replyLineMessage(replyToken, `❌ สั่ง${verb} ${binName} ไม่สำเร็จ: ไม่พบ${action === "restart" ? " ESP32" : " Servo Lock"} ที่ลงทะเบียน`);
@@ -82,6 +90,7 @@ async function queueDeviceCommand(event: any, replyToken: string, device: Instan
   return replyLineMessage(replyToken, `⏳ รับคำสั่ง${verb} ${binName} แล้ว กำลังรอ ESP32 ยืนยันผล จะส่งข้อความแจ้งว่าสำเร็จหรือสาเหตุที่ไม่สำเร็จ`);
 }
 
+/** Send a test message to the configured LINE recipient and report delivery success or failure. */
 router.post("/test", async (_req, res) => {
   try {
     await sendLineMessage("🤖 Smart Bin Test\n\nระบบเชื่อมต่อ LINE สำเร็จแล้ว ✅");
@@ -92,6 +101,7 @@ router.post("/test", async (_req, res) => {
   }
 });
 
+/** Process signed LINE events using the configured sender policy and reply with status or command results. */
 router.post("/webhook", verifyLineSignature, async (req, res) => {
   try {
     const allowedIds = (process.env.ALLOWED_USER_IDS || "").split(",").map(id => id.trim()).filter(Boolean);

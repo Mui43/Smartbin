@@ -53,7 +53,7 @@ function isRegistered(device: { binId?: string; name?: string; type?: string }) 
   return Boolean(device.binId && device.name && device.type);
 }
 
-// ESP32 polls every few seconds; each successful poll is a heartbeat.
+/** Record an authenticated device heartbeat, check restart completion, and return its pending command. */
 router.get("/poll", async (req, res) => {
   if (!hasDeviceKey(req)) {
     return res.status(401).json({ success: false, error: { message: "Invalid device API key" } });
@@ -87,7 +87,7 @@ router.get("/poll", async (req, res) => {
   }
 });
 
-// Clear a restart only after the controller has received it successfully.
+/** Acknowledge restart receipt, clear the pending action, and allow 90 seconds for LINE restart confirmation. */
 router.post("/ack-restart", async (req, res) => {
   if (!hasDeviceKey(req)) {
     return res.status(401).json({ success: false, error: { message: "Invalid device API key" } });
@@ -113,6 +113,7 @@ router.post("/ack-restart", async (req, res) => {
   }
 });
 
+/** Record an authenticated device state report, confirm matching servo commands, and broadcast the state. */
 router.post("/report", async (req, res) => {
   if (!hasDeviceKey(req)) {
     return res.status(401).json({ success: false, error: { message: "Invalid device API key" } });

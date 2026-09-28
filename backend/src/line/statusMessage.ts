@@ -3,12 +3,19 @@ import { Device } from "../models/device.js";
 import { Telemetry } from "../models/telemetry.js";
 import { LineMessage } from "../services/line.js";
 
+/** Create a wrapping LINE Flex text component with optional color and size. */
 const label = (text: string, color = "#D6E5DC", size = "sm") => ({ type: "text", text, color, size, wrap: true });
+/** Create a LINE Flex button whose postback encodes an action and bin ID. */
 const actionButton = (text: string, action: string, binId: string, color: string) => ({
   type: "button", style: "primary", height: "sm", color,
   action: { type: "postback", label: text, data: new URLSearchParams({ action, binId }).toString() },
 });
 
+/**
+ * Build status cards for up to ten bins sorted by name, with telemetry,
+ * device connectivity, lock state, and control buttons.
+ * Return a text message when no bins exist.
+ */
 export async function buildStatusMessage(): Promise<LineMessage> {
   const bins = await Bin.find().sort({ name: 1 }).limit(10).lean();
   if (!bins.length) return { type: "text", text: "ยังไม่มีถังขยะในระบบ" };

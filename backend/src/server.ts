@@ -146,6 +146,7 @@ app.use(
 // Start Server
 // ==================================
 
+/** Connect to MongoDB, start MQTT and background checkers, then listen for HTTP requests; exit on startup failure. */
 async function startServer() {
   try {
     await connectDatabase();

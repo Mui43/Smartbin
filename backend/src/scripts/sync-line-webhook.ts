@@ -1,5 +1,10 @@
 import "dotenv/config";
 
+/**
+ * Test and synchronize the LINE webhook URL using a local HTTPS ngrok tunnel.
+ * Require LINE_CHANNEL_ACCESS_TOKEN and a tunnel address containing port 4000;
+ * throw if configuration, tunnel discovery, webhook testing, or updating fails.
+ */
 async function main() {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
   if (!token) throw new Error("LINE_CHANNEL_ACCESS_TOKEN is missing");
