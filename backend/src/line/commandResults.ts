@@ -2,7 +2,13 @@ import { Device, IDevice, ILineCommand } from "../models/device.js";
 import { sendLineMessageTo } from "../services/line.js";
 
 const sending = new Set<string>();
+const MAX_DELIVERY_ATTEMPTS = 5;
 
+/**
+ * Send a due command result to LINE, clearing it on success.
+ * Suppress concurrent sends for this device and schedule failed deliveries
+ * with exponential backoff capped at 15 minutes.
+ */
 export async function deliverLineResult(device: IDevice) {
   const command = device.lineCommand;
   if (command?.phase !== "result" || !command.resultText || sending.has(device.deviceId) ||
@@ -20,7 +26,9 @@ export async function deliverLineResult(device: IDevice) {
     try {
       await Device.updateOne(
         { _id: device._id, "lineCommand.phase": "result", "lineCommand.requestedAt": command.requestedAt },
-        { $inc: { "lineCommand.deliveryAttempts": 1 }, $set: { "lineCommand.nextDeliveryAt": new Date(Date.now() + Math.min(60_000 * 2 ** attempts, 900_000)) } },
+        attempts + 1 >= MAX_DELIVERY_ATTEMPTS
+          ? { $unset: { lineCommand: "" } }
+          : { $inc: { "lineCommand.deliveryAttempts": 1 }, $set: { "lineCommand.nextDeliveryAt": new Date(Date.now() + Math.min(60_000 * 2 ** attempts, 900_000)) } },
       );
     } catch (saveError) {
       console.error("LINE command retry scheduling failed:", saveError);
@@ -30,6 +38,11 @@ export async function deliverLineResult(device: IDevice) {
   }
 }
 
+/**
+ * Complete a queued lock or unlock command when the reported state matches.
+ * Return the updated device, or null if no matching command was updated,
+ * and start delivering the success result to LINE.
+ */
 export async function confirmServoCommand(device: IDevice, state: "on" | "off") {
   const action = state === "on" ? "lock" : "unlock";
   const verb = state === "on" ? "ล็อก" : "ปลดล็อก";
@@ -48,6 +61,7 @@ export async function confirmServoCommand(device: IDevice, state: "on" | "off") 
   return updated;
 }
 
+/** Confirm an acknowledged restart when the boot ID changes and send its LINE result. */
 export async function confirmRestart(device: IDevice, bootId: string) {
   const command = device.lineCommand;
   if (command?.action !== "restart" || command.phase !== "restarting" || !command.bootIdAtRequest || command.bootIdAtRequest === bootId) return;
@@ -62,6 +76,7 @@ export async function confirmRestart(device: IDevice, bootId: string) {
   if (updated) void deliverLineResult(updated);
 }
 
+/** Cancel an unfinished LINE command, clear its pending action, and send the cancellation result. */
 export async function cancelLineCommand(device: IDevice) {
   const command = device.lineCommand;
   if (!command || command.phase === "result") return;
@@ -77,6 +92,7 @@ export async function cancelLineCommand(device: IDevice) {
   if (updated) void deliverLineResult(updated);
 }
 
+/** Convert expired commands into failure results and attempt delivery of outstanding results. */
 async function checkPendingLineCommands() {
   const expired = await Device.find({ "lineCommand.phase": { $in: ["queued", "restarting"] }, "lineCommand.deadlineAt": { $lte: new Date() } });
   for (const device of expired) {
@@ -102,6 +118,7 @@ async function checkPendingLineCommands() {
   for (const device of undelivered) await deliverLineResult(device);
 }
 
+/** Check command deadlines and retry deliveries every five seconds without keeping Node alive. */
 export function startLineCommandChecker() {
   const timer = setInterval(() => {
     checkPendingLineCommands().catch(error => console.error("LINE command checker failed:", error));

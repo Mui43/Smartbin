@@ -31,6 +31,7 @@ export function verifyLineSignature(
   next();
 }
 
+/** Return a supported action from a text or postback event, or null for unrecognized input. */
 export function parseLineAction(event: any) {
   const raw =
     event?.type === "postback"
@@ -67,11 +68,13 @@ export function parseLineAction(event: any) {
   return null;
 }
 
+/** Extract the bin ID from postback data, or return null when absent or not a postback. */
 function postbackBinId(event: any) {
   if (event?.type !== "postback") return null;
   return new URLSearchParams(String(event.postback?.data || "")).get("binId");
 }
 
+/** Return the source group, room, or user ID for result delivery, or null if unavailable. */
 function replyDestination(event: any): string | null {
   const source = event?.source;
   if (source?.type === "group") return source.groupId || null;
@@ -172,6 +175,7 @@ async function queueDeviceCommand(
   );
 }
 
+/** Send a test message to the configured LINE recipient and report delivery success or failure. */
 router.post("/test", async (_req, res) => {
   try {
     await sendLineMessage(
@@ -190,6 +194,7 @@ router.post("/test", async (_req, res) => {
   }
 });
 
+/** Process signed LINE events using the configured sender policy and reply with status or command results. */
 router.post("/webhook", verifyLineSignature, async (req, res) => {
   try {
     const allowedIds = (process.env.ALLOWED_USER_IDS || "")

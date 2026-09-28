@@ -6,6 +6,7 @@ export type LineMessage =
   | { type: "text"; text: string }
   | { type: "flex"; altText: string; contents: Record<string, unknown> };
 
+/** Push text to LINE_TARGET_USER_ID; reject if the recipient is missing or delivery fails. */
 export async function sendLineMessage(message: string) {
   const userId = process.env.LINE_TARGET_USER_ID?.trim();
   if (!userId) throw new Error("LINE Target User ID missing");
@@ -55,6 +56,7 @@ export async function sendLineMessageTo(
   return true;
 }
 
+/** Reply with text or a Flex message; return true on success and reject on missing credentials or delivery failure. */
 export async function replyLineMessage(
   replyToken: string,
   message: string | LineMessage,
