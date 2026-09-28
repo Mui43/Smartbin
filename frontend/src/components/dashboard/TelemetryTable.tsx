@@ -1,234 +1,124 @@
 "use client";
 
-
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Database, RefreshCw, AlertCircle } from "lucide-react";
-
-export interface TelemetryHistoryItem {
-  _id?: string;
-  binId: string;
-  level: number;
-  voltage: number;
-  batteryPct: number;
-  sensorStatus?: {
-    capacitive?: string;
-    inductive?: string;
-    level?: string;
-  };
-  timestamp: string;
-}
-
-interface TelemetryTableProps {
-  binId?: string;
-}
+import { Database, RefreshCw } from "lucide-react";
+import type { TelemetryHistory } from "@/hooks/useTelemetryHistory";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-export default function TelemetryTable({ binId }: TelemetryTableProps) {
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "--";
+  return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    dateStyle: "short",
+    timeStyle: "medium",
+  });
+}
+
+function SensorBadge({ value }: { value?: string }) {
+  const status = value || "unknown";
+  const color = status === "ok" ? "text-emerald-400 bg-emerald-500/10" : status === "warning" ? "text-amber-400 bg-amber-500/10" : "text-slate-400 bg-slate-500/10";
+  return <span className={`rounded-full px-2.5 py-1 text-xs ${color}`}>{status}</span>;
+}
+
+export default function TelemetryTable({ binId }: { binId?: string }) {
   const { data: session } = useSession();
-  const [data, setData] = useState<TelemetryHistoryItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const token = session?.user?.accessToken;
+  const [rows, setRows] = useState<TelemetryHistory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
-  const fetchHistory = useCallback(
-    async (isSilent = false) => {
-      if (!binId) {
+  const load = useCallback(async (signal?: AbortSignal, silent = false) => {
+    if (!binId || !token) {
+      setLoading(false);
+      return;
+    }
+    if (silent) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/telemetry?page=1&limit=10`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal,
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success || !Array.isArray(result.data)) {
+        throw new Error(result?.error?.message || "ไม่สามารถโหลดข้อมูล Telemetry ได้");
+      }
+      if (!signal?.aborted) {
+        setRows(result.data);
+        setError("");
+      }
+    } catch (cause) {
+      if (!signal?.aborted) setError(cause instanceof Error ? cause.message : "ไม่สามารถโหลดข้อมูล Telemetry ได้");
+    } finally {
+      if (!signal?.aborted) {
         setLoading(false);
-        return;
+        setRefreshing(false);
       }
-
-      if (isSilent || data.length > 0) {
-        setIsRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      setError(null);
-
-      try {
-        const token = session?.user?.accessToken;
-        const headers: HeadersInit = token
-          ? { Authorization: `Bearer ${token}` }
-          : {};
-
-        const res = await fetch(
-          `${API_URL}/api/bins/${binId}/telemetry?limit=10`,
-          { headers },
-        );
-
-        if (!res.ok) {
-          throw new Error(`Failed to fetch history (${res.status})`);
-        }
-
-        const result = await res.json();
-        const historyList = Array.isArray(result) ? result : result.data || [];
-
-        setData(historyList);
-      } catch (err: any) {
-        console.error("TelemetryTable fetch error:", err);
-        setError(err.message || "Failed to load telemetry history");
-        if (!isSilent && data.length === 0) {
-          setData([]);
-        }
-      } finally {
-        setLoading(false);
-        setIsRefreshing(false);
-      }
-    },
-    [binId, session?.user?.accessToken, data.length],
-  );
+    }
+  }, [binId, token]);
 
   useEffect(() => {
-    fetchHistory();
-  }, [binId, session?.user?.accessToken]);
+    const controller = new AbortController();
+    load(controller.signal);
+    const poll = window.setInterval(() => load(controller.signal, true), 15_000);
+    const events = new EventSource(`${API_URL}/api/realtime`);
+    let timer: number | undefined;
+    events.addEventListener("telemetry", (event) => {
+      try {
+        if (JSON.parse((event as MessageEvent).data).binId !== binId) return;
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => load(controller.signal, true), 300);
+      } catch { /* Periodic refresh still applies. */ }
+    });
+    return () => {
+      controller.abort();
+      window.clearInterval(poll);
+      window.clearTimeout(timer);
+      events.close();
+    };
+  }, [binId, load]);
 
   return (
     <div className="rounded-2xl border border-[#212b3d] bg-[#131822] p-5 shadow-xl sm:p-6">
-      {/* Header Bar */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#212b3d] bg-[#0a0d14] text-emerald-400">
-            <Database size={20} />
-          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#212b3d] bg-[#0a0d14] text-emerald-400"><Database size={20} /></div>
           <div>
-            <h2 className="text-lg font-bold tracking-tight text-white">
-              Telemetry Logs
-            </h2>
-            <p className="text-xs font-mono text-slate-400">
-              {binId ? `Bin ID: ${binId}` : "No Bin Selected"}
-            </p>
+            <h2 className="text-lg font-bold text-white">Telemetry Logs</h2>
+            <p className="text-xs text-slate-400">{binId ? `ข้อมูล 10 รายการล่าสุดของถัง ${binId}` : "ยังไม่ได้เลือกถัง"}</p>
           </div>
         </div>
-
-        <button
-          onClick={() => fetchHistory(true)}
-          disabled={loading || isRefreshing || !binId}
-          className="flex items-center gap-2 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-3.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-[#212b3d] hover:text-white active:scale-95 disabled:opacity-50"
-        >
-          <RefreshCw
-            size={14}
-            className={
-              loading || isRefreshing ? "animate-spin text-emerald-400" : ""
-            }
-          />
-          <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
+        <button type="button" onClick={() => load(undefined, true)} disabled={!binId || !token || loading || refreshing} className="flex items-center gap-2 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-3.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-[#212b3d] disabled:opacity-50">
+          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />รีเฟรช
         </button>
       </div>
-
-      {/* Table Section */}
-      <div className="relative overflow-x-auto rounded-xl border border-[#212b3d] bg-[#0a0d14]">
-        {/* Subtle Refreshing Overlay */}
-        {isRefreshing && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0a0d14]/30 backdrop-blur-[1px] transition-all">
-            <div className="flex items-center gap-2 rounded-lg border border-[#212b3d] bg-[#131822] px-3 py-1.5 text-xs font-medium text-emerald-400 shadow-lg">
-              <RefreshCw size={14} className="animate-spin" />
-              <span>Updating logs...</span>
-            </div>
-          </div>
-        )}
-
-        <table className="w-full text-left text-sm text-slate-300">
+      {error && <p role="alert" className="mb-3 text-sm text-rose-400">{error}</p>}
+      <div className="overflow-x-auto rounded-xl border border-[#212b3d] bg-[#0a0d14]">
+        <table className="w-full min-w-[850px] text-left text-sm text-slate-300">
           <thead className="border-b border-[#212b3d] bg-[#131822] text-xs font-semibold uppercase text-slate-400">
             <tr>
-              <th className="px-4 py-3.5">Timestamp</th>
-              <th className="px-4 py-3.5">Waste Level</th>
-              <th className="px-4 py-3.5">Voltage</th>
-              <th className="px-4 py-3.5">Battery</th>
-              <th className="px-4 py-3.5 text-right">Status</th>
+              <th className="px-4 py-3">เวลา (ไทย)</th><th className="px-4 py-3">ปริมาณขยะ</th><th className="px-4 py-3">Capacitive</th><th className="px-4 py-3">Inductive</th><th className="px-4 py-3">Level Sensor</th><th className="px-4 py-3">แรงดัน</th><th className="px-4 py-3">แบตเตอรี่</th>
             </tr>
           </thead>
-
-          <tbody
-            className={`divide-y divide-[#212b3d]/60 transition-opacity duration-200 ${
-              isRefreshing ? "opacity-40" : "opacity-100"
-            }`}
-          >
-            {loading ? (
-              // Initial Skeleton Rows
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="animate-pulse">
-                  <td className="px-4 py-4">
-                    <div className="h-3.5 w-32 rounded bg-[#212b3d]" />
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="h-3.5 w-12 rounded bg-[#212b3d]" />
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="h-3.5 w-16 rounded bg-[#212b3d]" />
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="h-3.5 w-14 rounded bg-[#212b3d]" />
-                  </td>
-                  <td className="px-4 py-4 text-right">
-                    <div className="ml-auto h-5 w-20 rounded-full bg-[#212b3d]" />
-                  </td>
+          <tbody className="divide-y divide-[#212b3d]/60">
+            {loading ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">กำลังโหลดข้อมูล...</td></tr>
+              : rows.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">ยังไม่มีข้อมูล Telemetry ของถังนี้</td></tr>
+              : rows.slice(0, 10).map((item) => (
+                <tr key={item._id} className="transition hover:bg-[#212b3d]/30">
+                  <td className="whitespace-nowrap px-4 py-3 text-xs">{formatDate(item.timestamp)}</td>
+                  <td className="px-4 py-3 font-semibold text-emerald-400">{item.level != null ? `${item.level}%` : "--"}</td>
+                  <td className="px-4 py-3"><SensorBadge value={item.sensorStatus?.capacitive} /></td>
+                  <td className="px-4 py-3"><SensorBadge value={item.sensorStatus?.inductive} /></td>
+                  <td className="px-4 py-3"><SensorBadge value={item.sensorStatus?.level} /></td>
+                  <td className="px-4 py-3">{typeof item.voltage === "number" ? `${item.voltage.toFixed(1)} V` : "--"}</td>
+                  <td className="px-4 py-3">{item.batteryPct != null ? `${item.batteryPct}%` : "--"}</td>
                 </tr>
-              ))
-            ) : error && data.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-10 text-center text-rose-400">
-                  <div className="flex items-center justify-center gap-2">
-                    <AlertCircle size={18} />
-                    <span>{error}</span>
-                  </div>
-                </td>
-              </tr>
-            ) : data.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-12 text-center text-slate-400">
-                  No telemetry history recorded for this bin.
-                </td>
-              </tr>
-            ) : (
-              data.map((item, index) => {
-                const dateStr = item.timestamp
-                  ? new Date(item.timestamp).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })
-                  : "N/A";
-
-                return (
-                  <tr
-                    key={item._id || index}
-                    className="transition hover:bg-[#212b3d]/30"
-                  >
-                    <td className="whitespace-nowrap px-4 py-3.5 font-mono text-xs text-slate-400">
-                      {dateStr}
-                    </td>
-
-                    <td className="px-4 py-3.5 font-semibold">
-                      <span
-                        className={
-                          item.level >= 80
-                            ? "text-rose-400"
-                            : item.level >= 60
-                              ? "text-amber-400"
-                              : "text-emerald-400"
-                        }
-                      >
-                        {item.level}%
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-3.5 text-slate-300">
-                      {item.voltage != null
-                        ? `${item.voltage.toFixed(1)} V`
-                        : "-"}
-                    </td>
-
-                    <td className="px-4 py-3.5 text-slate-300">
-                      {item.batteryPct != null ? `${item.batteryPct}%` : "-"}
-                    </td>
-
-                    <td className="px-4 py-3.5 text-right">
-                      <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-emerald-500/30">
-                        Received
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
+              ))}
           </tbody>
         </table>
       </div>

@@ -81,24 +81,16 @@ export default function LockControl({ binId }: { binId: string }) {
         setOnline(Boolean(result.data?.online));
         setPending(isPendingFromBackend);
 
-        // 🛡️ ป้องกัน UI เด้งกลับ:
-        // ถ้าผู้ใช้เพิ่งกดปุ่มสั่งงาน แต่ Backend ยังไม่อัปเดต state ให้ตรงกับ target -> ให้ยึด target ไว้ก่อน
+        // แสดงเฉพาะสถานะที่ ESP32 รายงานจริง ระหว่างรอคำสั่งให้ใช้ป้ายรอยืนยัน
+        setLocked(backendState);
         if (targetStateRef.current !== null) {
           if (
             backendState === targetStateRef.current &&
             !isPendingFromBackend
           ) {
-            // Backend อัปเดตตรงแล้ว และไม่มี pending แล้ว -> ปลดล็อก target
             targetStateRef.current = null;
             waitingSince.current = null;
-            setLocked(backendState);
-          } else {
-            // Backend ยังอัปเดตไม่เสร็จ -> ใช้ค่าเป้าหมายที่ผู้ใช้กด
-            setLocked(targetStateRef.current);
           }
-        } else {
-          // สภาวะปกติ -> แสดงผลตาม Backend
-          setLocked(backendState);
         }
 
         // กรณีหมดเวลา 30 วิแล้ว ESP32 ยังไม่ตอบกลับ
@@ -138,14 +130,12 @@ export default function LockControl({ binId }: { binId: string }) {
     setLoadingAction(action);
     setError("");
 
-    // 🟢 1. กำหนดเป้าหมายทันที เพื่อล็อก UI ไม่ให้โดน Polling ดึงค่าเก่ามาทับ
     targetStateRef.current = isLocking;
-    setLocked(isLocking);
     setPending(true);
     waitingSince.current = Date.now();
 
     try {
-      const response = await fetch(`${API_URL}/api/bins/${binId}/lock`, {
+      const response = await fetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/lock`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -159,14 +149,12 @@ export default function LockControl({ binId }: { binId: string }) {
       if (!response.ok || !result.success) {
         // ถ้ายิง API ไม่สำเร็จ คืนค่ากลับ
         targetStateRef.current = null;
-        setLocked(!isLocking);
         setPending(false);
         setError(result?.error?.message || "ไม่สามารถควบคุม Lock ได้");
       }
     } catch (err) {
       console.error("Lock control error:", err);
       targetStateRef.current = null;
-      setLocked(!isLocking);
       setPending(false);
       setError("ไม่สามารถเชื่อมต่อ Backend ได้");
     } finally {
@@ -246,7 +234,7 @@ export default function LockControl({ binId }: { binId: string }) {
         <div className="mt-5 grid grid-cols-2 gap-3">
           <button
             onClick={() => handleLock("lock")}
-            disabled={loadingAction !== null || !online}
+            disabled={loadingAction !== null || pending || !online}
             className="
               flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30
               bg-emerald-500/10 px-4 py-3 font-medium text-emerald-400 transition
@@ -264,7 +252,7 @@ export default function LockControl({ binId }: { binId: string }) {
 
           <button
             onClick={() => handleLock("unlock")}
-            disabled={loadingAction !== null || !online}
+            disabled={loadingAction !== null || pending || !online}
             className="
               flex items-center justify-center gap-2 rounded-xl border border-[#212b3d]
               bg-[#212b3d]/50 px-4 py-3 font-medium text-slate-200 transition

@@ -130,12 +130,6 @@ async function queueDeviceCommand(
   }
   const desired =
     action === "lock" ? "on" : action === "unlock" ? "off" : "restart";
-  if (action !== "restart" && device.state === desired) {
-    return replyLineMessage(
-      replyToken,
-      `✅ ${binName} ${action === "lock" ? "ล็อกอยู่แล้ว" : "ปลดล็อกอยู่แล้ว"} ตามสถานะล่าสุดที่ ESP32 รายงาน`,
-    );
-  }
   const now = new Date();
   const queued = await Device.findOneAndUpdate(
     {
@@ -148,6 +142,7 @@ async function queueDeviceCommand(
     {
       $set: {
         pendingCommand: desired,
+        pendingCommandAt: null,
         lineCommand: {
           to,
           action,

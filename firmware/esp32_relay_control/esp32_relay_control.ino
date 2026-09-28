@@ -117,6 +117,7 @@ bool currentIrDetected = false;
 bool currentCanDetected = false;
 bool currentCanServoOpen = false;
 bool currentCanRelayOn = false;
+unsigned long lastSensorSampleAt = 0;
 
 // =====================================================
 // Ultrasonic
@@ -164,6 +165,7 @@ void sensorTask(void*) {
     currentCanDetected = controller.proximityDetected;
     currentCanServoOpen = controller.servoOpen;
     currentCanRelayOn = controller.powerOn;
+    lastSensorSampleAt = millis();
     portEXIT_CRITICAL(&sensorMux);
     vTaskDelay(pdMS_TO_TICKS(5));
   }
@@ -356,7 +358,8 @@ bool acknowledgeRestart() {
 }
 
 void sendDeviceHeartbeat(
-  const char* deviceId
+  const char* deviceId,
+  const char* sensorState = nullptr
 ) {
 
   if (
@@ -376,6 +379,7 @@ void sendDeviceHeartbeat(
     "/api/device/poll?deviceId=" +
     deviceId;
   if (String(deviceId) == ESP32_DEVICE_ID) url += "&bootId=" + bootId;
+  if (sensorState != nullptr) url += String("&state=") + sensorState;
 
   http.begin(url);
 
@@ -456,15 +460,18 @@ void sendAllDeviceHeartbeats() {
     ESP32_DEVICE_ID
   );
 
-  // IR
-  sendDeviceHeartbeat(
-    IR_DEVICE_ID
-  );
-
-  // Proximity
-  sendDeviceHeartbeat(
-    PROXIMITY_DEVICE_ID
-  );
+  // A heartbeat is valid only when the sensor task has sampled recently.
+  bool irDetected, canDetected;
+  unsigned long sampledAt;
+  portENTER_CRITICAL(&sensorMux);
+  irDetected = currentIrDetected;
+  canDetected = currentCanDetected;
+  sampledAt = lastSensorSampleAt;
+  portEXIT_CRITICAL(&sensorMux);
+  if (sampledAt != 0 && millis() - sampledAt < 1000) {
+    sendDeviceHeartbeat(IR_DEVICE_ID, irDetected ? "on" : "off");
+    sendDeviceHeartbeat(PROXIMITY_DEVICE_ID, canDetected ? "on" : "off");
+  }
 
   // Servo CAN
   sendDeviceHeartbeat(
