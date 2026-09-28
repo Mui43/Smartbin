@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { Bin } from "../models/bin.js";
 import { Device } from "../models/device.js";
+import { Command } from "../models/command.js";
 import { authenticate } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createAuditLog } from "../services/auditLog.js";
@@ -53,6 +54,18 @@ router.post(
       if (device.status !== "online" || !device.lastSeen || Date.now() - device.lastSeen.getTime() > 60000) {
         return res.status(409).json({ success: false, error: { message: "Servo Lock ออฟไลน์ กรุณาตรวจ ESP32" } });
       }
+      const command = await Command.create({
+        binId,
+        deviceId: device.deviceId,
+        action,
+        source: "web",
+        status: "pending",
+        requestedBy: {
+          id: req.user?.id,
+          email: req.user?.email,
+          role: req.user?.role,
+        },
+      });
       device.pendingCommand = action === "lock" ? "on" : "off";
       await device.save();
 
@@ -78,6 +91,7 @@ router.post(
         success: true,
         data: {
           binId,
+          commandId: command.id,
           action,
           requestedBy: {
             id: req.user?.id,

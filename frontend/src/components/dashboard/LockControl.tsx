@@ -9,10 +9,15 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 export default function LockControl({ binId }: { binId: string }) {
   const { data: session } = useSession();
 
-  const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState<"lock" | "unlock" | null>(
+    null,
+  );
   const [locked, setLocked] = useState<boolean | null>(null);
   const [pending, setPending] = useState(false);
   const [online, setOnline] = useState(false);
+  const [error, setError] = useState("");
+
+  const targetStateRef = useRef<boolean | null>(null); // 🟢 เก็บค่าเป้าหมายที่ผู้ใช้กดล่าสุด
   const waitingSince = useRef<number | null>(null);
   const accessToken = session?.user?.accessToken;
 
@@ -20,35 +25,124 @@ export default function LockControl({ binId }: { binId: string }) {
     if (!accessToken) return;
     let active = true;
     const controller = new AbortController();
+
     async function refresh() {
       try {
-        const response = await fetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/lock`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: controller.signal });
+        const response = await fetch(
+          `${API_URL}/api/bins/${encodeURIComponent(binId)}/lock`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+            },
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
         const result = await response.json();
         if (!active) return;
-        if (!response.ok || !result.success) { setOnline(false); setError(result?.error?.message || "ไม่สามารถโหลดสถานะล็อกได้"); return; }
-        setLocked(result.data.state === "on" ? true : result.data.state === "off" ? false : null);
-        setOnline(result.data.online);
-        setPending(Boolean(result.data.pendingCommand));
-        if (!result.data.pendingCommand) waitingSince.current = null;
-        if (waitingSince.current && Date.now() - waitingSince.current > 30000) setError("ยังไม่ได้รับการยืนยันจาก ESP32 กรุณาตรวจการเชื่อมต่อและเฟิร์มแวร์");
-      } catch { if (active) { setOnline(false); setError("ไม่สามารถโหลดสถานะจาก Backend ได้"); } }
+
+        if (!response.ok || !result.success) {
+          setOnline(false);
+          setError(result?.error?.message || "ไม่สามารถโหลดสถานะล็อกได้");
+          return;
+        }
+
+        // 🟢 แปลงสถานะจาก Backend
+        const rawState = String(result.data?.state ?? "").toLowerCase();
+        const isBackendLocked =
+          rawState === "on" ||
+          rawState === "lock" ||
+          rawState === "locked" ||
+          rawState === "true" ||
+          rawState === "1";
+        const isBackendUnlocked =
+          rawState === "off" ||
+          rawState === "unlock" ||
+          rawState === "unlocked" ||
+          rawState === "false" ||
+          rawState === "0";
+
+        const backendState = isBackendLocked
+          ? true
+          : isBackendUnlocked
+            ? false
+            : null;
+        const isPendingFromBackend = Boolean(result.data?.pendingCommand);
+
+        console.log("🔍 Polling Status:", {
+          rawState,
+          backendState,
+          isPendingFromBackend,
+          currentTarget: targetStateRef.current,
+        });
+
+        setOnline(Boolean(result.data?.online));
+        setPending(isPendingFromBackend);
+
+        // 🛡️ ป้องกัน UI เด้งกลับ:
+        // ถ้าผู้ใช้เพิ่งกดปุ่มสั่งงาน แต่ Backend ยังไม่อัปเดต state ให้ตรงกับ target -> ให้ยึด target ไว้ก่อน
+        if (targetStateRef.current !== null) {
+          if (
+            backendState === targetStateRef.current &&
+            !isPendingFromBackend
+          ) {
+            // Backend อัปเดตตรงแล้ว และไม่มี pending แล้ว -> ปลดล็อก target
+            targetStateRef.current = null;
+            waitingSince.current = null;
+            setLocked(backendState);
+          } else {
+            // Backend ยังอัปเดตไม่เสร็จ -> ใช้ค่าเป้าหมายที่ผู้ใช้กด
+            setLocked(targetStateRef.current);
+          }
+        } else {
+          // สภาวะปกติ -> แสดงผลตาม Backend
+          setLocked(backendState);
+        }
+
+        // กรณีหมดเวลา 30 วิแล้ว ESP32 ยังไม่ตอบกลับ
+        if (waitingSince.current && Date.now() - waitingSince.current > 30000) {
+          setError("ยังไม่ได้รับการยืนยันจาก ESP32 กรุณาตรวจการเชื่อมต่อ");
+          targetStateRef.current = null;
+          waitingSince.current = null;
+        }
+      } catch (err: any) {
+        if (active && err.name !== "AbortError") {
+          setOnline(false);
+          setError("ไม่สามารถโหลดสถานะจาก Backend ได้");
+        }
+      }
     }
+
     void refresh();
-    const timer = setInterval(() => { void refresh(); }, 2000);
-    return () => { active = false; controller.abort(); clearInterval(timer); };
+    const timer = setInterval(() => {
+      void refresh();
+    }, 2000);
+
+    return () => {
+      active = false;
+      controller.abort();
+      clearInterval(timer);
+    };
   }, [binId, accessToken]);
-  const [error, setError] = useState("");
 
   const canControl =
     session?.user?.role === "admin" || session?.user?.role === "staff";
 
   async function handleLock(action: "lock" | "unlock") {
-    if (!session?.user?.accessToken) {
-      return;
-    }
+    if (!session?.user?.accessToken) return;
 
-    setLoading(true);
+    const isLocking = action === "lock";
+
+    setLoadingAction(action);
     setError("");
+
+    // 🟢 1. กำหนดเป้าหมายทันที เพื่อล็อก UI ไม่ให้โดน Polling ดึงค่าเก่ามาทับ
+    targetStateRef.current = isLocking;
+    setLocked(isLocking);
+    setPending(true);
+    waitingSince.current = Date.now();
 
     try {
       const response = await fetch(`${API_URL}/api/bins/${binId}/lock`, {
@@ -57,25 +151,26 @@ export default function LockControl({ binId }: { binId: string }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.user.accessToken}`,
         },
-        body: JSON.stringify({
-          action,
-        }),
+        body: JSON.stringify({ action }),
       });
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
+        // ถ้ายิง API ไม่สำเร็จ คืนค่ากลับ
+        targetStateRef.current = null;
+        setLocked(!isLocking);
+        setPending(false);
         setError(result?.error?.message || "ไม่สามารถควบคุม Lock ได้");
-        return;
       }
-
-      setPending(true);
-      waitingSince.current = Date.now();
     } catch (err) {
       console.error("Lock control error:", err);
+      targetStateRef.current = null;
+      setLocked(!isLocking);
+      setPending(false);
       setError("ไม่สามารถเชื่อมต่อ Backend ได้");
     } finally {
-      setLoading(false);
+      setLoadingAction(null);
     }
   }
 
@@ -106,15 +201,7 @@ export default function LockControl({ binId }: { binId: string }) {
         <div className="flex items-center gap-4">
           <div
             className={`
-              flex
-              h-14
-              w-14
-              shrink-0
-              items-center
-              justify-center
-              rounded-2xl
-              border
-              transition-all
+              flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition-all
               ${
                 locked
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-inner"
@@ -131,11 +218,25 @@ export default function LockControl({ binId }: { binId: string }) {
 
           <div>
             <p className="text-xs font-medium text-slate-400">Current Status</p>
-            <p
-              className={`mt-1 text-lg font-bold ${locked ? "text-emerald-400" : "text-slate-200"}`}
-            >
-              {pending ? "รอ ESP32 ยืนยัน" : locked === null ? "ยังไม่มีสถานะ" : locked ? "Locked" : "Unlocked"}
-            </p>
+            <div className="mt-1 flex items-center gap-2">
+              <p
+                className={`text-lg font-bold ${
+                  locked ? "text-emerald-400" : "text-slate-200"
+                }`}
+              >
+                {locked === null
+                  ? "ยังไม่มีสถานะ"
+                  : locked
+                    ? "Locked"
+                    : "Unlocked"}
+              </p>
+
+              {(pending || targetStateRef.current !== null) && (
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400 border border-amber-500/20 animate-pulse">
+                  รอยืนยัน...
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -145,29 +246,15 @@ export default function LockControl({ binId }: { binId: string }) {
         <div className="mt-5 grid grid-cols-2 gap-3">
           <button
             onClick={() => handleLock("lock")}
-            disabled={loading || !online}
+            disabled={loadingAction !== null || !online}
             className="
-              flex
-              items-center
-              justify-center
-              gap-2
-              rounded-xl
-              border
-              border-emerald-500/30
-              bg-emerald-500/10
-              px-4
-              py-3
-              font-medium
-              text-emerald-400
-              transition
-              hover:bg-emerald-500/20
-              active:scale-[0.98]
-              disabled:cursor-not-allowed
-              disabled:opacity-40
-              disabled:hover:bg-emerald-500/10
+              flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30
+              bg-emerald-500/10 px-4 py-3 font-medium text-emerald-400 transition
+              hover:bg-emerald-500/20 active:scale-[0.98] disabled:cursor-not-allowed
+              disabled:opacity-40 disabled:hover:bg-emerald-500/10
             "
           >
-            {loading && locked ? (
+            {loadingAction === "lock" ? (
               <Loader2 size={18} className="animate-spin shrink-0" />
             ) : (
               <Lock size={18} className="shrink-0" />
@@ -177,29 +264,15 @@ export default function LockControl({ binId }: { binId: string }) {
 
           <button
             onClick={() => handleLock("unlock")}
-            disabled={loading || !online}
+            disabled={loadingAction !== null || !online}
             className="
-              flex
-              items-center
-              justify-center
-              gap-2
-              rounded-xl
-              border
-              border-[#212b3d]
-              bg-[#212b3d]/50
-              px-4
-              py-3
-              font-medium
-              text-slate-200
-              transition
-              hover:bg-[#212b3d]
-              hover:text-white
-              active:scale-[0.98]
-              disabled:cursor-not-allowed
-              disabled:opacity-40
+              flex items-center justify-center gap-2 rounded-xl border border-[#212b3d]
+              bg-[#212b3d]/50 px-4 py-3 font-medium text-slate-200 transition
+              hover:bg-[#212b3d] hover:text-white active:scale-[0.98]
+              disabled:cursor-not-allowed disabled:opacity-40
             "
           >
-            {loading && !locked ? (
+            {loadingAction === "unlock" ? (
               <Loader2 size={18} className="animate-spin shrink-0" />
             ) : (
               <Unlock size={18} className="shrink-0" />
@@ -213,12 +286,8 @@ export default function LockControl({ binId }: { binId: string }) {
         </div>
       )}
 
-      {!online && <p className="mt-3 text-xs text-amber-400">Servo Lock ยังไม่ออนไลน์</p>}
-      {pending && <p className="mt-3 text-xs text-slate-400">คำสั่งรออุปกรณ์รับผ่าน HTTP (ทุกประมาณ 3 วินาที)</p>}
-      {loading && (
-        <p className="mt-3 text-center text-xs text-slate-400 animate-pulse">
-          Sending command...
-        </p>
+      {!online && (
+        <p className="mt-3 text-xs text-amber-400">Servo Lock ยังไม่ออนไลน์</p>
       )}
 
       {error && (

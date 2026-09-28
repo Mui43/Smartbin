@@ -6,14 +6,16 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 
 import { connectDatabase } from "./config/database.js";
+import { startAlertChecker } from "./alerts/notifyAlerts.js";
+import { startMqtt } from "./mqtt/client.js";
 
+// Import Routes ทั้งหมด (ไม่ซ้ำกัน)
 import healthRouter from "./routes/health.js";
 import binsRouter from "./routes/bins.js";
 import realtimeRouter from "./routes/realtime.js";
 import lockRouter from "./routes/lock.js";
 import alertsRouter from "./routes/alerts.js";
 import lineRouter from "./routes/line.js";
-import { startAlertChecker } from "./alerts/notifyAlerts.js";
 import authRouter from "./routes/auth.js";
 import logsRouter from "./routes/logs.js";
 import exportRouter from "./routes/export.js";
@@ -22,127 +24,60 @@ import deviceRouter from "./routes/device.js";
 import wasteStatsRouter from "./routes/wasteStats.js";
 import deviceHeartbeatRouter from "./routes/deviceHeartbeat.js";
 
-import { startMqtt } from "./mqtt/client.js";
-
 const app = express();
+const PORT = Number(process.env.PORT) || 4000;
 
-const PORT =
-  Number(process.env.PORT) || 4000;
-
+// ==================================
+// Middlewares
+// ==================================
 app.use(helmet());
-
-app.use(
-  cors({
-    origin: true,
-  })
-);
-
-app.use(express.json());
-
+app.use(cors({ origin: true }));
+app.use(express.json()); // อ่าน JSON Body สำหรับทุก Route รวมถึง LINE Webhook
 app.use(pinoHttp());
 
 // ==================================
-// Root
+// Root Route
 // ==================================
-
 app.get("/", (_req, res) => {
   res.json({
     success: true,
-    message:
-      "Smart Bin API is running",
+    message: "Smart Bin API is running",
   });
 });
 
 // ==================================
-// Routes
+// API Routes
 // ==================================
-
-app.use(
-  "/api/health",
-  healthRouter
-);
-
-app.use(
-  "/api/bins",
-  binsRouter
-);
-
-app.use(
-  "/api/realtime",
-  realtimeRouter
-);
-
-app.use(
-  "/api/bins",
-  lockRouter
-);
-
-app.use(
-  "/api/alerts",
-  alertsRouter
-);
-
-app.use(
-  "/api/line",
-  lineRouter
-);
-
-app.use(
-  "/api/auth",
-  authRouter
-);
-
-app.use(
-  "/api/logs",
-  logsRouter
-);
-
-app.use(
-  "/api/export",
-  exportRouter
-);
-
-app.use(
-  "/api/dashboard",
-  dashboardRouter
-);
-
-app.use(
-  "/api/waste-stats",
-  wasteStatsRouter
-);
-
-app.use(
-  "/api/device",
-  deviceRouter
-);
-
-app.use(
-  "/api/device/heartbeat",
-  deviceHeartbeatRouter
-);
+app.use("/api/health", healthRouter);
+app.use("/api/bins", binsRouter);
+app.use("/api/bins", lockRouter);
+app.use("/api/realtime", realtimeRouter);
+app.use("/api/alerts", alertsRouter);
+app.use("/api/line", lineRouter); // 🟢 LINE Webhook อยู่ตรงนี้จุดเดียว
+app.use("/api/auth", authRouter);
+app.use("/api/logs", logsRouter);
+app.use("/api/export", exportRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/waste-stats", wasteStatsRouter);
+app.use("/api/device", deviceRouter);
+app.use("/api/device/heartbeat", deviceHeartbeatRouter);
 
 // ==================================
-// 404
+// 404 Handler
 // ==================================
-
-app.use(
-  (_req, res) => {
-    res.status(404).json({
-      success: false,
-      error: {
-        code: "NOT_FOUND",
-        message:
-          "Route not found",
-      },
-    });
-  }
-);
+app.use((_req, res) => {
+  res.status(404).json({
+    success: false,
+    error: {
+      code: "NOT_FOUND",
+      message: "Route not found",
+    },
+  });
+});
 
 // ==================================
 // Start Server
 // ==================================
-
 async function startServer() {
   try {
     await connectDatabase();
@@ -150,21 +85,11 @@ async function startServer() {
     startMqtt();
     startAlertChecker();
 
-    app.listen(
-      PORT,
-      "0.0.0.0",
-      () => {
-        console.log(
-          `🚀 Backend running on port ${PORT}`
-        );
-      }
-    );
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Backend running on port ${PORT}`);
+    });
   } catch (error) {
-    console.error(
-      "❌ Failed to start server:",
-      error
-    );
-
+    console.error("❌ Failed to start server:", error);
     process.exit(1);
   }
 }
