@@ -2,13 +2,16 @@
 #include <PubSubClient.h>
 #include <ESP32Servo.h>
 #include <HTTPClient.h>
+#include "SensorController.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 // =====================================================
 // WiFi
 // =====================================================
 
 const char* WIFI_SSID = "Laphatsanan_2.4G";
-const char* WIFI_PASSWORD = "0875917884";
+const char* WIFI_PASSWORD = "your_wifi_password"; // Replace with your actual WiFi password
 
 // =====================================================
 // MQTT
@@ -23,12 +26,15 @@ const int MQTT_PORT = 1883;
 
 const char* BIN_ID = "A-001";
 
-const char* SERVER_URL = "http://192.168.1.147:4000";
+const char* SERVER_URL =
+  "http://192.168.1.147:4000";
 
-const char* DEVICE_API_KEY = "smartbin-A001-9fK2xP7mQ4vL8sT1";
+const char* DEVICE_API_KEY =
+  "your_device_api_key"; // Replace with your actual device API key
 
 // =====================================================
 // Device IDs
+// ต้องตรงกับ Device ID ในหน้า Devices
 // =====================================================
 
 const char* ESP32_DEVICE_ID =
@@ -61,44 +67,56 @@ const char* RELAY_LOCK_DEVICE_ID =
 // MQTT Topics
 // =====================================================
 
-String telemetryTopic = String("bins/") + BIN_ID + "/telemetry";
-String wasteTopic = String("bins/") + BIN_ID + "/event/waste";
+String telemetryTopic =
+  String("bins/") +
+  BIN_ID +
+  "/telemetry";
+
+String wasteTopic =
+  String("bins/") +
+  BIN_ID +
+  "/event/waste";
 
 // =====================================================
 // Sensor Pins
 // =====================================================
 
+// Proximity
 #define PROXI_PIN 34
+
+// IR
 #define IR_PIN 35
 
 // =====================================================
 // Relay + Servo
 // =====================================================
 
+// CAN
 #define RELAY_PIN 19
 #define SERVO_PIN 32
 
+// Door Lock
 #define RELAY_PIN2 21
 #define SERVO_PIN2 27
 
 Servo servo1;
 Servo servo2;
-
 const int LOCK_ANGLE = 23;
 const int UNLOCK_ANGLE = 120;
-
 bool doorLocked = true;
 
-bool canProcessed = false;
-bool irProcessed = false;
-
-// =====================================================
-// Servo CAN Timer
-// =====================================================
-
-bool servoCanActive = false;
-unsigned long servoCanStart = 0;
-const unsigned long servoCanDuration = 4000;
+const int CAN_HOME_ANGLE = 23;
+const int CAN_SORT_ANGLE = 120;
+// LOW activates most relay modules. Set HIGH if your module is active-high.
+const int CAN_RELAY_ON_LEVEL = LOW;
+const int CAN_RELAY_OFF_LEVEL = CAN_RELAY_ON_LEVEL == LOW ? HIGH : LOW;
+const int IR_ACTIVE_LEVEL = LOW;
+const int PROXIMITY_ACTIVE_LEVEL = LOW;
+portMUX_TYPE sensorMux = portMUX_INITIALIZER_UNLOCKED;
+bool currentIrDetected = false;
+bool currentCanDetected = false;
+bool currentCanServoOpen = false;
+bool currentCanRelayOn = false;
 
 // =====================================================
 // Ultrasonic
@@ -115,57 +133,116 @@ const unsigned long servoCanDuration = 4000;
 // =====================================================
 
 int irCount = 0;
+int publishedIrCount = 0;
+
+int readIrCount() {
+  portENTER_CRITICAL(&sensorMux);
+  const int count = irCount;
+  portEXIT_CRITICAL(&sensorMux);
+  return count;
+}
+
+void sensorTask(void*) {
+  SensorController controller;
+  bool previousServoOpen = false;
+  bool previousPowerOn = false;
+  for (;;) {
+    controller.update(digitalRead(IR_PIN) == IR_ACTIVE_LEVEL,
+                      digitalRead(PROXI_PIN) == PROXIMITY_ACTIVE_LEVEL, millis());
+    if (controller.powerOn != previousPowerOn) {
+      digitalWrite(RELAY_PIN, controller.powerOn ? CAN_RELAY_ON_LEVEL : CAN_RELAY_OFF_LEVEL);
+      previousPowerOn = controller.powerOn;
+    }
+    // Move locally before any HTTP report. No delay during the four-second hold.
+    if (controller.servoOpen != previousServoOpen) {
+      servo1.write(controller.servoOpen ? CAN_SORT_ANGLE : CAN_HOME_ANGLE);
+      previousServoOpen = controller.servoOpen;
+    }
+    portENTER_CRITICAL(&sensorMux);
+    if (controller.irTriggered) ++irCount;
+    currentIrDetected = controller.irDetected;
+    currentCanDetected = controller.proximityDetected;
+    currentCanServoOpen = controller.servoOpen;
+    currentCanRelayOn = controller.powerOn;
+    portEXIT_CRITICAL(&sensorMux);
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
 
 // =====================================================
 // WiFi + MQTT
 // =====================================================
 
 WiFiClient espClient;
-PubSubClient mqttClient(espClient);
+
+PubSubClient mqttClient(
+  espClient
+);
 
 // =====================================================
 // Timers
 // =====================================================
 
+// Telemetry 5 sec
 unsigned long lastSend = 0;
-const unsigned long sendInterval = 5000;
 
+const unsigned long sendInterval =
+  5000;
+
+// Serial 2 sec
 unsigned long lastSerial = 0;
-const unsigned long serialInterval = 2000;
 
+const unsigned long serialInterval =
+  2000;
+
+// Device heartbeat 3 sec
 unsigned long lastHeartbeat = 0;
-const unsigned long heartbeatInterval = 10000;
 
-// 🟢 เช็กคำสั่งปลดล็อกประตูเร็วขึ้นทุกๆ 1.5 วินาที
-unsigned long lastDoorPoll = 0;
-const unsigned long doorPollInterval = 1500;
-
-// =====================================================
-// Function Prototype
-// =====================================================
-
-void reportDeviceState(const char* deviceId, const char* state);
+const unsigned long heartbeatInterval =
+  3000;
 
 // =====================================================
 // Ultrasonic
 // =====================================================
 
 float readDistance() {
-  digitalWrite(TRIG_PIN, LOW);
+
+  digitalWrite(
+    TRIG_PIN,
+    LOW
+  );
+
   delayMicroseconds(2);
 
-  digitalWrite(TRIG_PIN, HIGH);
+  digitalWrite(
+    TRIG_PIN,
+    HIGH
+  );
+
   delayMicroseconds(10);
 
-  digitalWrite(TRIG_PIN, LOW);
+  digitalWrite(
+    TRIG_PIN,
+    LOW
+  );
 
-  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  long duration =
+    pulseIn(
+      ECHO_PIN,
+      HIGH,
+      30000
+    );
 
   if (duration == 0) {
+
     return -1;
   }
 
-  float distance = duration * 0.0343 / 2.0;
+  float distance =
+    duration *
+    0.0343 /
+    2.0;
+
   return distance;
 }
 
@@ -174,22 +251,47 @@ float readDistance() {
 // =====================================================
 
 void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) {
+
+  if (
+    WiFi.status() ==
+    WL_CONNECTED
+  ) {
+
     return;
   }
 
-  Serial.print("Connecting WiFi");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print(
+    "Connecting WiFi"
+  );
 
-  while (WiFi.status() != WL_CONNECTED) {
+  WiFi.begin(
+    WIFI_SSID,
+    WIFI_PASSWORD
+  );
+
+  while (
+    WiFi.status() !=
+    WL_CONNECTED
+  ) {
+
     delay(500);
+
     Serial.print(".");
   }
 
   Serial.println();
-  Serial.println("WiFi connected");
-  Serial.print("ESP32 IP: ");
-  Serial.println(WiFi.localIP());
+
+  Serial.println(
+    "WiFi connected"
+  );
+
+  Serial.print(
+    "ESP32 IP: "
+  );
+
+  Serial.println(
+    WiFi.localIP()
+  );
 }
 
 // =====================================================
@@ -197,16 +299,39 @@ void connectWiFi() {
 // =====================================================
 
 void connectMQTT() {
-  while (!mqttClient.connected()) {
-    Serial.print("Connecting MQTT...");
 
-    String clientId = "ESP32-" + String(BIN_ID);
+  while (
+    !mqttClient.connected()
+  ) {
 
-    if (mqttClient.connect(clientId.c_str())) {
-      Serial.println("connected");
+    Serial.print(
+      "Connecting MQTT..."
+    );
+
+    String clientId =
+      "ESP32-" +
+      String(BIN_ID);
+
+    if (
+      mqttClient.connect(
+        clientId.c_str()
+      )
+    ) {
+
+      Serial.println(
+        "connected"
+      );
+
     } else {
-      Serial.print("failed, state=");
-      Serial.println(mqttClient.state());
+
+      Serial.print(
+        "failed, state="
+      );
+
+      Serial.println(
+        mqttClient.state()
+      );
+
       delay(3000);
     }
   }
@@ -243,9 +368,8 @@ void sendDeviceHeartbeat(
   }
 
   HTTPClient http;
-  // 🟢 เพิ่ม Timeout ป้องกัน ESP32 ค้าง
   http.setConnectTimeout(1000);
-  http.setTimeout(1000);
+  http.setTimeout(1500);
 
   String url =
     String(SERVER_URL) +
@@ -254,9 +378,14 @@ void sendDeviceHeartbeat(
   if (String(deviceId) == ESP32_DEVICE_ID) url += "&bootId=" + bootId;
 
   http.begin(url);
-  http.addHeader("x-api-key", DEVICE_API_KEY);
 
-  int httpCode = http.GET();
+  http.addHeader(
+    "x-api-key",
+    DEVICE_API_KEY
+  );
+
+  int httpCode =
+    http.GET();
 
   bool restartRequested = false;
   if (httpCode == 200 && String(deviceId) == ESP32_DEVICE_ID) {
@@ -270,30 +399,41 @@ void sendDeviceHeartbeat(
     String response = http.getString();
     response.replace(" ", "");
     response.replace("\n", "");
-
-    // 🟢 ตรวจสอบรองรับทั้ง "lock"/"on" และ "unlock"/"off"
-    bool lockRequested = (response.indexOf("\"command\":\"lock\"") >= 0) || (response.indexOf("\"command\":\"on\"") >= 0);
-    bool unlockRequested = (response.indexOf("\"command\":\"unlock\"") >= 0) || (response.indexOf("\"command\":\"off\"") >= 0);
-
+    const bool lockRequested = response.indexOf("\"command\":\"on\"") >= 0;
+    const bool unlockRequested = response.indexOf("\"command\":\"off\"") >= 0;
     if (lockRequested || unlockRequested) {
       doorLocked = lockRequested;
-
       servo2.write(doorLocked ? LOCK_ANGLE : UNLOCK_ANGLE);
       delay(600);
-
       Serial.println(doorLocked ? "Door servo: LOCK" : "Door servo: UNLOCK");
-
       reportDeviceState(SERVO_LOCK_DEVICE_ID, doorLocked ? "on" : "off");
     }
   }
 
-  Serial.print("Heartbeat ");
-  Serial.print(deviceId);
-  Serial.print(": ");
-  Serial.println(httpCode);
+  Serial.print(
+    "Heartbeat "
+  );
 
-  if (httpCode != 200 && httpCode > 0) {
-    Serial.println(http.getString());
+  Serial.print(
+    deviceId
+  );
+
+  Serial.print(
+    ": "
+  );
+
+  Serial.println(
+    httpCode
+  );
+
+  if (
+    httpCode != 200 &&
+    httpCode > 0
+  ) {
+
+    Serial.println(
+      http.getString()
+    );
   }
 
   http.end();
@@ -306,89 +446,225 @@ void sendDeviceHeartbeat(
 }
 
 // =====================================================
-// Heartbeat ทั้งหมด
+// Heartbeat อุปกรณ์ทั้งหมด
 // =====================================================
 
 void sendAllDeviceHeartbeats() {
-  sendDeviceHeartbeat(ESP32_DEVICE_ID);
-  sendDeviceHeartbeat(IR_DEVICE_ID);
-  sendDeviceHeartbeat(PROXIMITY_DEVICE_ID);
-  sendDeviceHeartbeat(SERVO_CAN_DEVICE_ID);
-  sendDeviceHeartbeat(SERVO_LOCK_DEVICE_ID);
-  sendDeviceHeartbeat(RELAY_CAN_DEVICE_ID);
-  sendDeviceHeartbeat(RELAY_LOCK_DEVICE_ID);
 
-  float distance = readDistance();
+  // ESP32
+  sendDeviceHeartbeat(
+    ESP32_DEVICE_ID
+  );
+
+  // IR
+  sendDeviceHeartbeat(
+    IR_DEVICE_ID
+  );
+
+  // Proximity
+  sendDeviceHeartbeat(
+    PROXIMITY_DEVICE_ID
+  );
+
+  // Servo CAN
+  sendDeviceHeartbeat(
+    SERVO_CAN_DEVICE_ID
+  );
+
+  // Servo Door Lock
+  sendDeviceHeartbeat(
+    SERVO_LOCK_DEVICE_ID
+  );
+
+  // Relay CAN
+  sendDeviceHeartbeat(
+    RELAY_CAN_DEVICE_ID
+  );
+
+  // Relay Door Lock
+  sendDeviceHeartbeat(
+    RELAY_LOCK_DEVICE_ID
+  );
+
+  // Ultrasonic:
+  // ส่ง heartbeat เฉพาะตอนอ่านค่าได้
+  float distance =
+    readDistance();
 
   if (distance >= 0) {
-    sendDeviceHeartbeat(ULTRASONIC_DEVICE_ID);
+
+    sendDeviceHeartbeat(
+      ULTRASONIC_DEVICE_ID
+    );
+
   } else {
-    Serial.println("Ultrasonic heartbeat skipped: No Echo");
+
+    Serial.println(
+      "Ultrasonic heartbeat skipped: No Echo"
+    );
   }
 }
 
 // =====================================================
 // Report Device State
+//
+// Backend ต้องการ:
+// {
+//   "deviceId": "...",
+//   "state": "on" | "off"
+// }
 // =====================================================
 
-void reportDeviceState(const char* deviceId, const char* state) {
-  if (WiFi.status() != WL_CONNECTED) {
-    return;
+bool reportDeviceState(
+  const char* deviceId,
+  const char* state
+) {
+
+  if (
+    WiFi.status() !=
+    WL_CONNECTED
+  ) {
+
+    return false;
   }
 
   HTTPClient http;
   http.setConnectTimeout(1000);
-  http.setTimeout(1000);
+  http.setTimeout(1500);
 
-  String url = String(SERVER_URL) + "/api/device/report";
+  String url =
+    String(SERVER_URL) +
+    "/api/device/report";
 
   http.begin(url);
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("x-api-key", DEVICE_API_KEY);
 
-  String payload = "{";
-  payload += "\"deviceId\":\"";
-  payload += deviceId;
-  payload += "\",";
-  payload += "\"state\":\"";
-  payload += state;
-  payload += "\"";
-  payload += "}";
+  http.addHeader(
+    "Content-Type",
+    "application/json"
+  );
 
-  int httpCode = http.POST(payload);
+  http.addHeader(
+    "x-api-key",
+    DEVICE_API_KEY
+  );
 
-  Serial.print("Report ");
-  Serial.print(deviceId);
-  Serial.print(" -> ");
-  Serial.print(state);
-  Serial.print(" HTTP: ");
-  Serial.println(httpCode);
+  String payload =
+    "{";
 
-  if (httpCode != 200 && httpCode > 0) {
-    Serial.println(http.getString());
+  payload +=
+    "\"deviceId\":\"";
+
+  payload +=
+    deviceId;
+
+  payload +=
+    "\",";
+
+  payload +=
+    "\"state\":\"";
+
+  payload +=
+    state;
+
+  payload +=
+    "\"";
+
+  payload +=
+    "}";
+
+  int httpCode =
+    http.POST(
+      payload
+    );
+
+  Serial.print(
+    "Report "
+  );
+
+  Serial.print(
+    deviceId
+  );
+
+  Serial.print(
+    " -> "
+  );
+
+  Serial.print(
+    state
+  );
+
+  Serial.print(
+    " HTTP: "
+  );
+
+  Serial.println(
+    httpCode
+  );
+
+  if (
+    httpCode != 200 &&
+    httpCode > 0
+  ) {
+
+    Serial.println(
+      http.getString()
+    );
   }
 
   http.end();
+  return httpCode == 200;
 }
 
 // =====================================================
 // Waste Event
 // =====================================================
 
-void publishWasteEvent() {
-  String payload = "{\"sensor\":\"ir\"}";
+bool publishWasteEvent() {
 
-  bool result = mqttClient.publish(wasteTopic.c_str(), payload.c_str());
+  String payload =
+    "{";
+
+  payload +=
+    "\"sensor\":\"ir\"";
+
+  payload +=
+    "}";
+
+  bool result =
+    mqttClient.publish(
+      wasteTopic.c_str(),
+      payload.c_str()
+    );
 
   if (result) {
-    Serial.println("Waste Event MQTT OK");
-    Serial.print("Topic: ");
-    Serial.println(wasteTopic);
-    Serial.print("Count: ");
-    Serial.println(irCount);
+
+    Serial.println(
+      "Waste Event MQTT OK"
+    );
+
+    Serial.print(
+      "Topic: "
+    );
+
+    Serial.println(
+      wasteTopic
+    );
+
+    Serial.print(
+      "Count: "
+    );
+
+    Serial.println(
+      readIrCount()
+    );
+
   } else {
-    Serial.println("Waste Event MQTT FAILED");
+
+    Serial.println(
+      "Waste Event MQTT FAILED"
+    );
   }
+  return result;
 }
 
 // =====================================================
@@ -396,58 +672,219 @@ void publishWasteEvent() {
 // =====================================================
 
 void setup() {
-  Serial.begin(115200);
 
-  pinMode(PROXI_PIN, INPUT);
-  pinMode(IR_PIN, INPUT);
   Serial.begin(
     115200
   );
   bootId = String(esp_random(), HEX);
 
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);
+  // ===================================================
+  // Sensors
+  // ===================================================
 
-  pinMode(RELAY_PIN2, OUTPUT);
-  digitalWrite(RELAY_PIN2, HIGH);
+  pinMode(
+    PROXI_PIN,
+    INPUT
+  );
 
+  pinMode(
+    IR_PIN,
+    INPUT
+  );
+
+  // ===================================================
+  // Relay CAN
+  // ===================================================
+
+  pinMode(
+    RELAY_PIN,
+    OUTPUT
+  );
+
+  digitalWrite(
+    RELAY_PIN,
+    CAN_RELAY_OFF_LEVEL
+  );
+
+  // ===================================================
+  // Relay Door
+  // ===================================================
+
+  pinMode(
+    RELAY_PIN2,
+    OUTPUT
+  );
+
+  digitalWrite(
+    RELAY_PIN2,
+    HIGH
+  );
+
+  // ===================================================
   // Servo CAN
-  servo1.attach(SERVO_PIN);
-  servo1.write(23);
+  // ===================================================
 
+  servo1.attach(
+    SERVO_PIN
+  );
+
+  servo1.write(
+    CAN_HOME_ANGLE
+  );
+
+  // ===================================================
   // Servo Door
-  servo2.attach(SERVO_PIN2);
-  servo2.write(LOCK_ANGLE);
+  // ===================================================
 
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
-  digitalWrite(TRIG_PIN, LOW);
+  servo2.attach(
+    SERVO_PIN2
+  );
 
+  servo2.write(
+    LOCK_ANGLE
+  );
+
+  // ===================================================
+  // Ultrasonic
+  // ===================================================
+
+  pinMode(
+    TRIG_PIN,
+    OUTPUT
+  );
+
+  pinMode(
+    ECHO_PIN,
+    INPUT
+  );
+
+  digitalWrite(
+    TRIG_PIN,
+    LOW
+  );
+
+  // ===================================================
+  // WiFi
+  // ===================================================
+
+  if (xTaskCreatePinnedToCore(sensorTask, "bin-sensors", 3072, nullptr, 2, nullptr, 1) != pdPASS) {
+    Serial.println("ERROR: sensor task could not start");
+    while (true) delay(1000);
+  }
   connectWiFi();
 
-  mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
+  // ===================================================
+  // MQTT
+  // ===================================================
+
+  mqttClient.setServer(
+    MQTT_SERVER,
+    MQTT_PORT
+  );
+
   connectMQTT();
 
-  // Heartbeat ครั้งแรก
+  // ===================================================
+  // Initial Heartbeats
+  // ===================================================
+
   sendAllDeviceHeartbeats();
 
-  // Initial states
-  reportDeviceState(IR_DEVICE_ID, "off");
-  reportDeviceState(PROXIMITY_DEVICE_ID, "off");
-  reportDeviceState(SERVO_CAN_DEVICE_ID, "off");
-  reportDeviceState(SERVO_LOCK_DEVICE_ID, doorLocked ? "on" : "off");
-  reportDeviceState(RELAY_CAN_DEVICE_ID, "off");
-  reportDeviceState(RELAY_LOCK_DEVICE_ID, "off");
+  // ===================================================
+  // Initial Device States
+  // ===================================================
+
+  reportDeviceState(
+    IR_DEVICE_ID,
+    "off"
+  );
+
+  reportDeviceState(
+    PROXIMITY_DEVICE_ID,
+    "off"
+  );
+
+  reportDeviceState(
+    SERVO_CAN_DEVICE_ID,
+    "off"
+  );
+
+  reportDeviceState(
+    SERVO_LOCK_DEVICE_ID,
+    doorLocked ? "on" : "off"
+  );
+
+  reportDeviceState(
+    RELAY_CAN_DEVICE_ID,
+    "off"
+  );
+
+  reportDeviceState(
+    RELAY_LOCK_DEVICE_ID,
+    "off"
+  );
+
+  // ===================================================
+  // Serial
+  // ===================================================
 
   Serial.println();
-  Serial.println("==============================");
-  Serial.println("SMART BIN STARTED");
-  Serial.println("==============================");
-  Serial.print("BIN ID: ");
-  Serial.println(BIN_ID);
-  Serial.print("ESP32 DEVICE ID: ");
-  Serial.println(ESP32_DEVICE_ID);
-  Serial.println("==============================");
+
+  Serial.println(
+    "=============================="
+  );
+
+  Serial.println(
+    "SMART BIN STARTED"
+  );
+
+  Serial.println(
+    "=============================="
+  );
+
+  Serial.print(
+    "BIN ID: "
+  );
+
+  Serial.println(
+    BIN_ID
+  );
+
+  Serial.print(
+    "ESP32 DEVICE ID: "
+  );
+
+  Serial.println(
+    ESP32_DEVICE_ID
+  );
+
+  Serial.print(
+    "Backend: "
+  );
+
+  Serial.println(
+    SERVER_URL
+  );
+
+  Serial.print(
+    "Telemetry: "
+  );
+
+  Serial.println(
+    telemetryTopic
+  );
+
+  Serial.print(
+    "Waste Event: "
+  );
+
+  Serial.println(
+    wasteTopic
+  );
+
+  Serial.println(
+    "=============================="
+  );
 }
 
 // =====================================================
@@ -455,204 +892,411 @@ void setup() {
 // =====================================================
 
 void loop() {
+
   // ===================================================
   // WiFi
   // ===================================================
-  if (WiFi.status() != WL_CONNECTED) {
+
+  if (
+    WiFi.status() !=
+    WL_CONNECTED
+  ) {
+
     connectWiFi();
   }
 
   // ===================================================
   // MQTT
   // ===================================================
-  if (!mqttClient.connected()) {
+
+  if (
+    !mqttClient.connected()
+  ) {
+
     connectMQTT();
   }
+
   mqttClient.loop();
 
   // ===================================================
-  // อ่าน Sensor ก่อน Heartbeat
+  // Heartbeat อุปกรณ์ทั้งหมด
+  // ทุก 3 วินาที
   // ===================================================
-  bool canDetected = (digitalRead(PROXI_PIN) == LOW);
-  bool irDetected = (digitalRead(IR_PIN) == LOW);
 
-  // ===================================================
-  // IR Counter
-  // ===================================================
-  if (irDetected && !irProcessed) {
-    irProcessed = true;
-    irCount++;
+  if (
+    millis() -
+      lastHeartbeat >=
+    heartbeatInterval
+  ) {
 
-    Serial.println();
-    Serial.println("=======================");
-    Serial.println("WASTE DETECTED");
-    Serial.print("IR Count: ");
-    Serial.println(irCount);
-    Serial.println("=======================");
+    lastHeartbeat =
+      millis();
 
-    if (mqttClient.connected()) {
-      publishWasteEvent();
-    }
-
-    reportDeviceState(IR_DEVICE_ID, "on");
-  }
-
-  // ===================================================
-  // Reset IR
-  // ===================================================
-  if (!irDetected && irProcessed) {
-    irProcessed = false;
-    reportDeviceState(IR_DEVICE_ID, "off");
-  }
-
-  // ===================================================
-  // CAN / Proximity
-  // ===================================================
-  if (canDetected && !canProcessed && !servoCanActive) {
-    canProcessed = true;
-
-    Serial.println();
-    Serial.println("CAN DETECTED");
-
-    servo1.write(120);
-    servoCanStart = millis();
-    servoCanActive = true;
-
-    digitalWrite(RELAY_PIN, HIGH);
-
-    reportDeviceState(PROXIMITY_DEVICE_ID, "on");
-    reportDeviceState(RELAY_CAN_DEVICE_ID, "on");
-    reportDeviceState(SERVO_CAN_DEVICE_ID, "on");
-  }
-
-  // ===================================================
-  // Servo CAN Timer
-  // ===================================================
-  if (servoCanActive && millis() - servoCanStart >= servoCanDuration) {
-    servo1.write(23);
-    servoCanActive = false;
-
-    Serial.println("Servo returned");
-
-    reportDeviceState(SERVO_CAN_DEVICE_ID, "off");
-    reportDeviceState(RELAY_CAN_DEVICE_ID, "off");
-  }
-
-  // ===================================================
-  // Reset Proximity
-  // ===================================================
-  if (!canDetected && canProcessed) {
-    canProcessed = false;
-    reportDeviceState(PROXIMITY_DEVICE_ID, "off");
-  }
-
-  // ===================================================
-  // 🟢 Poll ปลดล็อกประตูทุก 1.5 วินาที (ตอบสนองไว)
-  // ===================================================
-  if (millis() - lastDoorPoll >= doorPollInterval) {
-    lastDoorPoll = millis();
-    sendDeviceHeartbeat(SERVO_LOCK_DEVICE_ID);
-  }
-
-  // ===================================================
-  // Heartbeat รวมอุปกรณ์ทั้งหมด ทุก 10 วินาที
-  // ===================================================
-  if (millis() - lastHeartbeat >= heartbeatInterval) {
-    lastHeartbeat = millis();
     sendAllDeviceHeartbeats();
   }
 
   // ===================================================
-  // Serial แสดงผล ทุก 2 วินาที
+  // Sensor readings
   // ===================================================
-  if (millis() - lastSerial >= serialInterval) {
-    lastSerial = millis();
-    float distance = readDistance();
+
+  bool canDetected, irDetected, canServoOpen, canRelayOn;
+  int countSnapshot;
+  portENTER_CRITICAL(&sensorMux);
+  canDetected = currentCanDetected;
+  irDetected = currentIrDetected;
+  canServoOpen = currentCanServoOpen;
+  canRelayOn = currentCanRelayOn;
+  countSnapshot = irCount;
+  portEXIT_CRITICAL(&sensorMux);
+
+  static bool reportedIr = false, reportedCan = false, reportedServo = false, reportedRelay = false;
+  static unsigned long lastStateReport = 0;
+  if (millis() - lastStateReport >= 1000) {
+    lastStateReport = millis();
+    if (irDetected != reportedIr && reportDeviceState(IR_DEVICE_ID, irDetected ? "on" : "off")) reportedIr = irDetected;
+    if (canDetected != reportedCan && reportDeviceState(PROXIMITY_DEVICE_ID, canDetected ? "on" : "off")) reportedCan = canDetected;
+    if (canServoOpen != reportedServo && reportDeviceState(SERVO_CAN_DEVICE_ID, canServoOpen ? "on" : "off")) reportedServo = canServoOpen;
+    if (canRelayOn != reportedRelay && reportDeviceState(RELAY_CAN_DEVICE_ID, canRelayOn ? "on" : "off")) reportedRelay = canRelayOn;
+  }
+
+  // Count locally even while HTTP/MQTT is unavailable; send each pending event.
+  static unsigned long lastWasteRetry = 0;
+  if (mqttClient.connected() && millis() - lastWasteRetry >= 1000) {
+    lastWasteRetry = millis();
+    for (int sent = 0; publishedIrCount < countSnapshot && sent < 10; ++sent) {
+      if (!publishWasteEvent()) break;
+      ++publishedIrCount;
+    }
+  }
+  static int lastPrintedCount = -1;
+  if (countSnapshot != lastPrintedCount) {
+    lastPrintedCount = countSnapshot;
+    Serial.print("IR Count (local): ");
+    Serial.println(countSnapshot);
+  }
+
+  // ===================================================
+  // Serial Sensor Status
+  // ===================================================
+
+  if (
+    millis() -
+      lastSerial >=
+    serialInterval
+  ) {
+
+    lastSerial =
+      millis();
+
+    float distance =
+      readDistance();
 
     Serial.println();
-    Serial.println("------------------------------");
-    Serial.print("CAN Sensor: ");
-    Serial.println(canDetected ? "DETECTED" : "CLEAR");
 
-    Serial.print("IR Sensor: ");
-    Serial.println(irDetected ? "DETECTED" : "CLEAR");
+    Serial.println(
+      "------------------------------"
+    );
 
-    Serial.print("IR Count: ");
-    Serial.println(irCount);
+    Serial.print(
+      "CAN Sensor: "
+    );
 
-    if (distance >= 0) {
-      int fillPercent;
-      if (distance >= EMPTY_DISTANCE) {
-        fillPercent = 0;
-      } else if (distance <= FULL_DISTANCE) {
-        fillPercent = 100;
-      } else {
-        fillPercent = ((EMPTY_DISTANCE - distance) / (EMPTY_DISTANCE - FULL_DISTANCE)) * 100.0;
-      }
+    if (canDetected) {
 
-      Serial.print("Distance: ");
-      Serial.print(distance, 1);
-      Serial.println(" cm");
+      Serial.println(
+        "DETECTED"
+      );
 
-      Serial.print("Fill Level: ");
-      Serial.print(fillPercent);
-      Serial.println("%");
     } else {
-      Serial.println("Ultrasonic: No Echo");
+
+      Serial.println(
+        "CLEAR"
+      );
     }
 
-    Serial.println("------------------------------");
+    Serial.print(
+      "IR Sensor: "
+    );
+
+    if (irDetected) {
+
+      Serial.println(
+        "DETECTED"
+      );
+
+    } else {
+
+      Serial.println(
+        "CLEAR"
+      );
+    }
+
+    Serial.print(
+      "IR Count: "
+    );
+
+    Serial.println(
+      countSnapshot
+    );
+
+    if (
+      distance >= 0
+    ) {
+
+      int fillPercent;
+
+      if (
+        distance >=
+        EMPTY_DISTANCE
+      ) {
+
+        fillPercent =
+          0;
+
+      } else if (
+        distance <=
+        FULL_DISTANCE
+      ) {
+
+        fillPercent =
+          100;
+
+      } else {
+
+        fillPercent =
+          (
+            (
+              EMPTY_DISTANCE -
+              distance
+            ) /
+            (
+              EMPTY_DISTANCE -
+              FULL_DISTANCE
+            )
+          ) * 100.0;
+      }
+
+      Serial.print(
+        "Distance: "
+      );
+
+      Serial.print(
+        distance,
+        1
+      );
+
+      Serial.println(
+        " cm"
+      );
+
+      Serial.print(
+        "Fill Level: "
+      );
+
+      Serial.print(
+        fillPercent
+      );
+
+      Serial.println(
+        "%"
+      );
+
+    } else {
+
+      Serial.println(
+        "Ultrasonic: No Echo"
+      );
+    }
+
+    Serial.println(
+      "------------------------------"
+    );
   }
 
   // ===================================================
-  // MQTT Telemetry ทุก 5 วินาที
+  // MQTT Telemetry
+  // ทุก 5 วินาที
   // ===================================================
-  if (millis() - lastSend >= sendInterval) {
-    lastSend = millis();
-    float distance = readDistance();
 
-    if (distance < 0) {
-      Serial.println("Ultrasonic ERROR");
+  if (
+    millis() -
+      lastSend >=
+    sendInterval
+  ) {
+
+    lastSend =
+      millis();
+
+    float distance =
+      readDistance();
+
+    if (
+      distance < 0
+    ) {
+
+      Serial.println(
+        "Ultrasonic ERROR"
+      );
+
     } else {
+
       int level;
-      if (distance >= EMPTY_DISTANCE) {
-        level = 0;
-      } else if (distance <= FULL_DISTANCE) {
-        level = 100;
+
+      if (
+        distance >=
+        EMPTY_DISTANCE
+      ) {
+
+        level =
+          0;
+
+      } else if (
+        distance <=
+        FULL_DISTANCE
+      ) {
+
+        level =
+          100;
+
       } else {
-        level = ((EMPTY_DISTANCE - distance) / (EMPTY_DISTANCE - FULL_DISTANCE)) * 100.0;
+
+        level =
+          (
+            (
+              EMPTY_DISTANCE -
+              distance
+            ) /
+            (
+              EMPTY_DISTANCE -
+              FULL_DISTANCE
+            )
+          ) * 100.0;
       }
 
-      float voltage = 12.6;
-      int batteryPct = 78;
+      // Test Battery
+      float voltage =
+        12.6;
 
-      String payload = "{";
-      payload += "\"level\":";
-      payload += String(level);
-      payload += ",\"sensorStatus\":{";
-      payload += "\"capacitive\":\"ok\",";
-      payload += "\"inductive\":\"ok\",";
-      payload += "\"level\":\"ok\"";
-      payload += "}";
-      payload += ",\"voltage\":";
-      payload += String(voltage, 1);
-      payload += ",\"batteryPct\":";
-      payload += String(batteryPct);
-      payload += "}";
-
-      bool result = mqttClient.publish(telemetryTopic.c_str(), payload.c_str());
+      int batteryPct =
+        78;
 
       Serial.println();
-      Serial.println("MQTT JSON:");
-      Serial.println(payload);
+
+      Serial.println(
+        "Sending Telemetry"
+      );
+
+      Serial.print(
+        "Distance: "
+      );
+
+      Serial.print(
+        distance,
+        1
+      );
+
+      Serial.println(
+        " cm"
+      );
+
+      Serial.print(
+        "Level: "
+      );
+
+      Serial.print(
+        level
+      );
+
+      Serial.println(
+        "%"
+      );
+
+      Serial.print(
+        "IR Count: "
+      );
+
+      Serial.println(
+        countSnapshot
+      );
+
+      // =================================================
+      // MQTT JSON
+      // =================================================
+
+      String payload =
+        "{";
+
+      payload +=
+        "\"level\":";
+
+      payload +=
+        String(level);
+
+      payload +=
+        ",\"sensorStatus\":{";
+
+      payload +=
+        "\"capacitive\":\"ok\",";
+
+      payload +=
+        "\"inductive\":\"ok\",";
+
+      payload +=
+        "\"level\":\"ok\"";
+
+      payload +=
+        "}";
+
+      payload +=
+        ",\"voltage\":";
+
+      payload +=
+        String(
+          voltage,
+          1
+        );
+
+      payload +=
+        ",\"batteryPct\":";
+
+      payload +=
+        String(
+          batteryPct
+        );
+
+      payload +=
+        "}";
+
+      Serial.println();
+
+      Serial.println(
+        "MQTT JSON:"
+      );
+
+      Serial.println(
+        payload
+      );
+
+      bool result =
+        mqttClient.publish(
+          telemetryTopic.c_str(),
+          payload.c_str()
+        );
 
       if (result) {
-        Serial.println("MQTT publish OK");
+
+        Serial.println(
+          "MQTT publish OK"
+        );
+
       } else {
-        Serial.println("MQTT publish FAILED");
+
+        Serial.println(
+          "MQTT publish FAILED"
+        );
       }
     }
   }
 
-  delay(20);
+  delay(50);
 }

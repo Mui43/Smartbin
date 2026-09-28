@@ -177,7 +177,7 @@ router.post("/test", async (_req, res) => {
     await sendLineMessage(
       "🤖 Smart Bin Test\n\nระบบเชื่อมต่อ LINE สำเร็จแล้ว ✅",
     );
-    return res.json({ success: true, message: "LINE message sent" });
+    res.json({ success: true, message: "LINE message sent" });
   } catch (error) {
     console.error("LINE test error:", error);
     res.status(500).json({
