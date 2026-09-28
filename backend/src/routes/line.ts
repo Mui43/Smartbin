@@ -95,7 +95,7 @@ router.post("/test", async (_req, res) => {
 router.post("/webhook", verifyLineSignature, async (req, res) => {
   try {
     const allowedIds = (process.env.ALLOWED_USER_IDS || "").split(",").map(id => id.trim()).filter(Boolean);
-    const allowAll = allowedIds.length === 0 || allowedIds.includes("*");
+    const allowAll = allowedIds.includes("*");
     for (const event of req.body?.events || []) {
       const replyToken = event.replyToken;
       if (!replyToken) continue;

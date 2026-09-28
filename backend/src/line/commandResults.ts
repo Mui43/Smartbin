@@ -2,6 +2,7 @@ import { Device, IDevice, ILineCommand } from "../models/device.js";
 import { sendLineMessageTo } from "../services/line.js";
 
 const sending = new Set<string>();
+const MAX_DELIVERY_ATTEMPTS = 5;
 
 export async function deliverLineResult(device: IDevice) {
   const command = device.lineCommand;
@@ -20,7 +21,9 @@ export async function deliverLineResult(device: IDevice) {
     try {
       await Device.updateOne(
         { _id: device._id, "lineCommand.phase": "result", "lineCommand.requestedAt": command.requestedAt },
-        { $inc: { "lineCommand.deliveryAttempts": 1 }, $set: { "lineCommand.nextDeliveryAt": new Date(Date.now() + Math.min(60_000 * 2 ** attempts, 900_000)) } },
+        attempts + 1 >= MAX_DELIVERY_ATTEMPTS
+          ? { $unset: { lineCommand: "" } }
+          : { $inc: { "lineCommand.deliveryAttempts": 1 }, $set: { "lineCommand.nextDeliveryAt": new Date(Date.now() + Math.min(60_000 * 2 ** attempts, 900_000)) } },
       );
     } catch (saveError) {
       console.error("LINE command retry scheduling failed:", saveError);
