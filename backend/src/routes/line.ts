@@ -1,8 +1,12 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
-import { sendLineMessage, replyLineMessage } from "../services/line";
-import { getDb } from "../lib/mongodb";
-import { DeviceDocument } from "../types/device";
+import { sendLineMessage, replyLineMessage } from "../services/line.js";
+import { Bin } from "../models/bin.js";
+import { Command } from "../models/command.js";
+import {
+  createBinCarouselFlex,
+  getQuickReplyMenu,
+} from "../services/lineHelper.js";
 
 const router = Router();
 
@@ -33,7 +37,7 @@ const verifyLineSignature = (req: Request, res: Response, next: Function) => {
 router.post("/test", async (_req: Request, res: Response) => {
   try {
     await sendLineMessage(
-      "🤖 Smart Bin Test\n\nระบบเชื่อมต่อ LINE สำเร็จแล้ว ✅",
+      "🤖 Smart Bin Test\n\nระบบเชื่อมต่อ LINE สำเร็จแล้ว ✅"
     );
     return res.json({ success: true, message: "LINE message sent" });
   } catch (error) {
@@ -62,7 +66,6 @@ router.post(
       for (const event of events) {
         const userId = event.source?.userId;
 
-        // 🟢 ปริ้นท์ Log แสดง LINE User ID และ Event ทุกครั้งที่มีคนส่งข้อความหรือกดปุ่ม
         console.log("\n========================================");
         console.log(`📩 New Event from User ID: [ ${userId} ]`);
 
@@ -74,100 +77,154 @@ router.post(
         console.log("========================================\n");
 
         // Check Whitelist
-        // 🟢 ถ้ากำหนด ALLOWED_USER_IDS เป็น "*" หรือไม่มีการระบุ ให้ข้ามการเช็ค Whitelist (อนุญาตทุกคน)
         const allowAll = process.env.ALLOWED_USER_IDS === "*";
 
         if (!allowAll && (!userId || !allowedUserIds.includes(userId))) {
           console.warn(
-            `⚠️ Unauthorized access attempt from User ID: ${userId}`,
+            `⚠️ Unauthorized access attempt from User ID: ${userId}`
           );
           if (event.replyToken) {
             await replyLineMessage(
               event.replyToken,
-              "⛔ คุณไม่มีสิทธิ์ใช้งานระบบนี้ (Unauthorized)",
+              "⛔ คุณไม่มีสิทธิ์ใช้งานระบบนี้ (Unauthorized)"
             );
           }
           continue;
         }
 
-        let action: string | null = null;
+        let action: "lock" | "unlock" | "status" | "clear" | null = null;
+        let targetBinId: string | undefined = undefined;
 
-        // รองรับกรณีรับค่าแบบ Text จาก Rich Menu (On, Off, Status, Clear)
+        // 🟢 1. ดักจับข้อความพิมพ์ (Text Message)
         if (event.type === "message" && event.message.type === "text") {
-          // แปลงข้อความให้เป็นอักษรเล็ก และตัดช่องว่างออก
           let text = event.message.text.trim().toLowerCase();
 
-          // ตัดคำว่า "action = " ออกหากผู้ใช้ส่งรูปแบบ "Action = On" หรือ "Action = Status" มา
-          if (text.startsWith("action = ")) {
-            text = text.replace("action = ", "").trim();
+          if (text.startsWith("action = ") || text.startsWith("action=")) {
+            text = text.replace(/action\s*=\s*/, "").trim();
           }
 
-          if (["on", "off", "status", "clear"].includes(text)) {
-            action = text;
+          const match = text.match(
+            /^(ล็อก|ปลดล็อก|lock|unlock|clear|เคลียร์ขยะ)\s*(.*)$/i
+          );
+          if (match) {
+            const cmd = match[1].toLowerCase();
+            targetBinId = match[2].trim().toUpperCase() || undefined;
+
+            if (["lock", "ล็อก"].includes(cmd)) action = "lock";
+            else if (["unlock", "ปลดล็อก"].includes(cmd)) action = "unlock";
+            else if (["clear", "เคลียร์ขยะ"].includes(cmd)) action = "clear";
+          } else if (
+            ["status", "สถานะ", "เช็คสถานะ", "เช็กสถานะ", "ถังขยะ", "bin"].includes(text) ||
+            text.includes("สถานะ")
+          ) {
+            action = "status";
           }
         }
+        // 🟢 2. ดักจับปุ่มกดจาก Postback
+        else if (event.type === "postback") {
+          const data = event.postback.data;
+          const params = new URLSearchParams(data);
+          const act = params.get("action")?.toLowerCase();
+          targetBinId = params.get("binId")?.toUpperCase() || undefined;
 
-        // ถ้ามี Action ตรงตามคำสั่ง ให้ประมวลผลคำสั่งลง MongoDB
+          if (act === "lock" || act === "on") action = "lock";
+          else if (act === "unlock" || act === "off") action = "unlock";
+          else if (act === "status") action = "status";
+          else if (act === "clear") action = "clear";
+        }
+
+        // 🟢 3. ประมวลผลคำสั่ง
         if (action) {
-          const deviceId = "esp32-01";
-          const db = await getDb();
-          const collection = db.collection<DeviceDocument>("devices");
-          const now = new Date();
+          // หากไม่มีการระบุ binId มา จะใช้ binId แรกสุดในระบบเป็น Default
+          if (!targetBinId && action !== "status") {
+            const firstBin = await Bin.findOne().sort({ createdAt: 1 });
+            targetBinId = firstBin?.binId || "BIN001";
+          }
 
-          if (action === "on" || action === "off") {
-            await collection.updateOne(
-              { deviceId },
-              {
-                $set: {
-                  pendingCommand: action,
-                  lastCommandBy: userId,
-                  lastCommandAt: now,
-                },
-              },
-              { upsert: true },
-            );
-
-            const actionText = action === "on" ? "เปิด" : "ปิด";
-            await replyLineMessage(
-              event.replyToken,
-              `🟢 บันทึกคำสั่ง "${actionText}เครื่อง" เรียบร้อยแล้ว กำลังส่งไปยังอุปกรณ์...`,
-            );
-          } else if (action === "status") {
-            const device = await collection.findOne({ deviceId });
-            if (!device) {
+          // CASE 1: สั่ง Lock หรือ Unlock
+          if (action === "lock" || action === "unlock") {
+            if (!targetBinId) {
               await replyLineMessage(
                 event.replyToken,
-                "⚠️ ไม่พบข้อมูลอุปกรณ์ในระบบ",
+                "❌ ไม่พบรหัสถังขยะที่ระบุ"
               );
               continue;
             }
 
-            const isOnline =
-              device.lastSeen &&
-              now.getTime() - new Date(device.lastSeen).getTime() < 30000;
+            const bin = await Bin.findOne({ binId: targetBinId });
+            if (!bin) {
+              await replyLineMessage(
+                event.replyToken,
+                `❌ ไม่พบข้อมูลถังขยะรหัส "${targetBinId}" ในระบบ`
+              );
+              continue;
+            }
 
-            const statusText =
-              `📡 สถานะอุปกรณ์ (${deviceId})\n` +
-              `• การเชื่อมต่อ: ${isOnline ? "🟢 ออนไลน์" : "🔴 ออฟไลน์"}\n` +
-              `• สถานะปัจจุบัน: ${device.state || "unknown"}\n` +
-              `• คำสั่งที่ค้างอยู่: ${device.pendingCommand || "ไม่มี"}`;
-
-            await replyLineMessage(event.replyToken, statusText);
-          } else if (action === "clear") {
-            await collection.updateOne(
-              { deviceId },
-              {
-                $set: {
-                  pendingCommand: null,
-                  state: "unknown",
-                },
+            await Command.create({
+              binId: targetBinId,
+              action: action,
+              source: "line",
+              status: "pending",
+              requestedBy: {
+                id: userId,
+                email: `line:${userId}`,
+                role: "line_user",
               },
-              { upsert: true },
-            );
+            });
+
+            const isLock = action === "lock";
+            const messageText = isLock
+              ? `🔒 บันทึกคำสั่ง "ล็อกถังขยะ (${bin.name})"\nลงในคิวเรียบร้อยแล้ว รอ ESP32 ดึงคำสั่ง...`
+              : `🔓 บันทึกคำสั่ง "ปลดล็อกถังขยะ (${bin.name})"\nลงในคิวเรียบร้อยแล้ว รอ ESP32 ดึงคำสั่ง...`;
+
+            await replyLineMessage(event.replyToken, messageText);
+          }
+          // CASE 2: เช็กสถานะถังขยะ
+          else if (action === "status") {
+            const flexCarousel = await createBinCarouselFlex();
+            await replyLineMessage(event.replyToken, [
+              flexCarousel as any,
+              {
+                type: "text",
+                text: "เลือกรายการสั่งงานถังขยะได้จากเมนูด้านบนครับ",
+                quickReply: getQuickReplyMenu(),
+              },
+            ]);
+          }
+          // CASE 3: แจ้งเคลียร์ขยะ
+          else if (action === "clear") {
+            if (!targetBinId) {
+              await replyLineMessage(
+                event.replyToken,
+                "❌ ไม่พบรหัสถังขยะที่ระบุ"
+              );
+              continue;
+            }
+
+            const bin = await Bin.findOne({ binId: targetBinId });
+            if (!bin) {
+              await replyLineMessage(
+                event.replyToken,
+                `❌ ไม่พบข้อมูลถังขยะรหัส "${targetBinId}" ในระบบ`
+              );
+              continue;
+            }
+
+            await Command.create({
+              binId: targetBinId,
+              action: "clear",
+              source: "line",
+              status: "pending",
+              requestedBy: {
+                id: userId,
+                email: `line:${userId}`,
+                role: "line_user",
+              },
+            });
 
             await replyLineMessage(
               event.replyToken,
-              "🧹 ล้างสถานะอุปกรณ์เรียบร้อยแล้ว",
+              `🧹 แจ้งเคลียร์ขยะถัง (${bin.name}) เรียบร้อยแล้ว`
             );
           }
         }
@@ -178,7 +235,7 @@ router.post(
       console.error("LINE Webhook Error:", error);
       return res.status(500).json({ error: "Internal Server Error" });
     }
-  },
+  }
 );
 
 export default router;

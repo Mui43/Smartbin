@@ -10,10 +10,7 @@ export type DeviceType =
   | "DOOR_LOCK"
   | "OTHER";
 
-export type DeviceStatus =
-  | "online"
-  | "offline"
-  | "warning";
+export type DeviceStatus = "online" | "offline" | "warning";
 
 export interface IDevice extends Document {
   deviceId: string;
@@ -75,11 +72,7 @@ const deviceSchema = new Schema<IDevice>(
 
     status: {
       type: String,
-      enum: [
-        "online",
-        "offline",
-        "warning",
-      ],
+      enum: ["online", "offline", "warning"],
       default: "offline",
     },
 
@@ -106,8 +99,7 @@ const deviceSchema = new Schema<IDevice>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-export const Device =
-  mongoose.model<IDevice>("Device", deviceSchema);
+export const Device = mongoose.model<IDevice>("Device", deviceSchema);

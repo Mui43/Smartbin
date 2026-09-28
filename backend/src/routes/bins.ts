@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { thaiDateFilter } from "../lib/thaiTime.js";
 import { Bin } from "../models/bin.js";
+import { Device } from "../models/device.js"; // 1. เพิ่ม import Device
+import { Command } from "../models/command.js"; // 2. แก้ path ให้ถูกต้อง
 import { Telemetry } from "../models/telemetry.js";
 import { authenticate } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
@@ -8,25 +10,28 @@ import { createAuditLog } from "../services/auditLog.js";
 
 const router = Router();
 
+// Helper สำหรับหาอุปกรณ์ Servo Lock ของถังนั้นๆ
+const lockDeviceFilter = (binId: string) => ({
+  binId,
+  type: "SERVO_MOTOR" as const,
+  deviceId: /^servo-lock-/i,
+});
+
 /**
  * GET /api/bins
  * ดูรายการถังทั้งหมด
- * admin / staff / viewer
  */
 router.get("/", authenticate, async (_req, res) => {
   try {
-    const bins = await Bin.find()
-      .sort({ name: 1 })
-      .lean();
+    const bins = await Bin.find().sort({ name: 1 }).lean();
 
     const data = await Promise.all(
       bins.map(async (bin) => {
-        const latestTelemetry =
-          await Telemetry.findOne({
-            binId: bin.binId,
-          })
-            .sort({ timestamp: -1 })
-            .lean();
+        const latestTelemetry = await Telemetry.findOne({
+          binId: bin.binId,
+        })
+          .sort({ timestamp: -1 })
+          .lean();
 
         return {
           id: bin._id,
@@ -35,284 +40,163 @@ router.get("/", authenticate, async (_req, res) => {
           location: bin.location,
           mqttTopic: bin.mqttTopic,
           thresholdPct: bin.thresholdPct,
-
-          level:
-            latestTelemetry?.level ?? null,
-
-          sensorStatus:
-            latestTelemetry?.sensorStatus ?? null,
-
-          voltage:
-            latestTelemetry?.voltage ?? null,
-
-          batteryPct:
-            latestTelemetry?.batteryPct ?? null,
-
-          lastSeen:
-            latestTelemetry?.timestamp ?? null,
-
+          level: latestTelemetry?.level ?? null,
+          sensorStatus: latestTelemetry?.sensorStatus ?? null,
+          voltage: latestTelemetry?.voltage ?? null,
+          batteryPct: latestTelemetry?.batteryPct ?? null,
+          lastSeen: latestTelemetry?.timestamp ?? null,
           createdAt: bin.createdAt,
           updatedAt: bin.updatedAt,
         };
-      })
+      }),
     );
 
-    res.json({
-      success: true,
-      data,
-    });
+    res.json({ success: true, data });
   } catch (error) {
     console.error("Get bins error:", error);
-
     res.status(500).json({
       success: false,
-      error: {
-        code: "BINS_FETCH_FAILED",
-        message: "Unable to fetch bins",
-      },
+      error: { code: "BINS_FETCH_FAILED", message: "Unable to fetch bins" },
     });
   }
 });
 
 /**
  * POST /api/bins
- * สร้างถังใหม่
- * admin เท่านั้น
+ * สร้างถังใหม่ (Admin เท่านั้น)
+ */
+router.post("/", authenticate, requireRole("admin"), async (req, res) => {
+  try {
+    const { binId, name, location, mqttTopic, thresholdPct } = req.body;
+
+    if (!binId || !name || !location || !mqttTopic) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "MISSING_FIELDS",
+          message: "binId, name, location and mqttTopic are required",
+        },
+      });
+    }
+
+    const existingBin = await Bin.findOne({
+      $or: [{ binId }, { mqttTopic }],
+    });
+
+    if (existingBin) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: "BIN_ALREADY_EXISTS",
+          message: "Bin ID or MQTT topic already exists",
+        },
+      });
+    }
+
+    const bin = await Bin.create({
+      binId: String(binId).trim(),
+      name: String(name).trim(),
+      location: String(location).trim(),
+      mqttTopic: String(mqttTopic).trim(),
+      thresholdPct: thresholdPct !== undefined ? Number(thresholdPct) : 85,
+    });
+
+    await createAuditLog({
+      req,
+      action: "CREATE_BIN",
+      binId: bin.binId,
+      details: {
+        name: bin.name,
+        location: bin.location,
+        mqttTopic: bin.mqttTopic,
+        thresholdPct: bin.thresholdPct,
+      },
+    });
+
+    res.status(201).json({ success: true, data: bin });
+  } catch (error) {
+    console.error("Create bin error:", error);
+    res.status(500).json({
+      success: false,
+      error: { code: "BIN_CREATE_FAILED", message: "Unable to create bin" },
+    });
+  }
+});
+
+/**
+ * POST /api/bins/:id/lock
+ * ส่งคำสั่ง Lock / Unlock ไปยังคิว Command
  */
 router.post(
-  "/",
+  "/:id/lock",
   authenticate,
-  requireRole("admin"),
+  requireRole("admin", "staff"),
   async (req, res) => {
     try {
-      const {
-        binId,
-        name,
-        location,
-        mqttTopic,
-        thresholdPct,
-      } = req.body;
+      const binId = String(req.params.id);
+      const { action } = req.body;
 
-      if (
-        !binId ||
-        !name ||
-        !location ||
-        !mqttTopic
-      ) {
+      if (action !== "lock" && action !== "unlock") {
         return res.status(400).json({
           success: false,
           error: {
-            code: "MISSING_FIELDS",
-            message:
-              "binId, name, location and mqttTopic are required",
+            code: "INVALID_LOCK_ACTION",
+            message: "Action must be lock or unlock",
           },
         });
       }
 
-      const existingBin = await Bin.findOne({
-        $or: [
-          { binId },
-          { mqttTopic },
-        ],
-      });
+      const bin = await Bin.findOne({ binId });
+      if (!bin) {
+        return res.status(404).json({
+          success: false,
+          error: { code: "BIN_NOT_FOUND", message: "Bin not found" },
+        });
+      }
 
-      if (existingBin) {
+      const device = await Device.findOne(lockDeviceFilter(binId));
+      if (!device) {
+        return res.status(404).json({
+          success: false,
+          error: { message: "ไม่พบ Servo Lock ที่ลงทะเบียนกับถังนี้" },
+        });
+      }
+
+      if (
+        device.status !== "online" ||
+        !device.lastSeen ||
+        Date.now() - device.lastSeen.getTime() > 60000
+      ) {
         return res.status(409).json({
           success: false,
-          error: {
-            code: "BIN_ALREADY_EXISTS",
-            message:
-              "Bin ID or MQTT topic already exists",
-          },
+          error: { message: "Servo Lock ออฟไลน์ กรุณาตรวจ ESP32" },
         });
       }
 
-      const bin = await Bin.create({
-        binId: String(binId).trim(),
-        name: String(name).trim(),
-        location: String(location).trim(),
-        mqttTopic: String(mqttTopic).trim(),
-        thresholdPct:
-          thresholdPct !== undefined
-            ? Number(thresholdPct)
-            : 85,
+      // บันทึกคำสั่งลงคอลเลกชัน commands
+      await Command.create({
+        binId,
+        deviceId: device.deviceId,
+        action,
+        source: "web",
+        status: "pending",
+        requestedBy: {
+          id: req.user?.id,
+          email: req.user?.email,
+          role: req.user?.role,
+        },
       });
 
       await createAuditLog({
         req,
-        action: "CREATE_BIN",
-        binId: bin.binId,
-        details: {
-          name: bin.name,
-          location: bin.location,
-          mqttTopic: bin.mqttTopic,
-          thresholdPct: bin.thresholdPct,
-        },
-      });
-
-      res.status(201).json({
-        success: true,
-        data: bin,
-      });
-    } catch (error) {
-      console.error("Create bin error:", error);
-
-      res.status(500).json({
-        success: false,
-        error: {
-          code: "BIN_CREATE_FAILED",
-          message: "Unable to create bin",
-        },
-      });
-    }
-  }
-);
-
-/**
- * PUT /api/bins/:id
- * แก้ไขข้อมูลถัง
- * admin เท่านั้น
- */
-router.put(
-  "/:id",
-  authenticate,
-  requireRole("admin"),
-  async (req, res) => {
-    try {
-      const binId = String(req.params.id);
-
-      const {
-        name,
-        location,
-        mqttTopic,
-        thresholdPct,
-      } = req.body;
-
-      const updateData: {
-        name?: string;
-        location?: string;
-        mqttTopic?: string;
-        thresholdPct?: number;
-      } = {};
-
-      if (name !== undefined) {
-        updateData.name =
-          String(name).trim();
-      }
-
-      if (location !== undefined) {
-        updateData.location =
-          String(location).trim();
-      }
-
-      if (mqttTopic !== undefined) {
-        updateData.mqttTopic =
-          String(mqttTopic).trim();
-      }
-
-      if (thresholdPct !== undefined) {
-        const value = Number(thresholdPct);
-
-        if (
-          Number.isNaN(value) ||
-          value < 0 ||
-          value > 100
-        ) {
-          return res.status(400).json({
-            success: false,
-            error: {
-              code: "INVALID_THRESHOLD",
-              message:
-                "thresholdPct must be between 0 and 100",
-            },
-          });
-        }
-
-        updateData.thresholdPct = value;
-      }
-
-      const bin = await Bin.findOneAndUpdate(
-        { binId },
-        { $set: updateData },
-        {
-          new: false,
-          runValidators: true,
-        }
-      );
-
-      if (!bin) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            code: "BIN_NOT_FOUND",
-            message: "Bin not found",
-          },
-        });
-      }
-
-      await createAuditLog({
-        req,
-        action: "UPDATE_BIN",
+        action: action === "lock" ? "LOCK" : "UNLOCK",
         binId,
         details: {
-          changes: updateData,
-          before: Object.fromEntries(Object.keys(updateData).map(key => [key, bin.get(key)])),
-          after: updateData,
-        },
-      });
-
-      res.json({
-        success: true,
-        data: { ...bin.toObject(), ...updateData },
-      });
-    } catch (error) {
-      console.error("Update bin error:", error);
-
-      res.status(500).json({
-        success: false,
-        error: {
-          code: "BIN_UPDATE_FAILED",
-          message: "Unable to update bin",
-        },
-      });
-    }
-  }
-);
-
-/**
- * DELETE /api/bins/:id
- * ลบถัง
- * admin เท่านั้น
- */
-router.delete(
-  "/:id",
-  authenticate,
-  requireRole("admin"),
-  async (req, res) => {
-    try {
-      const binId = String(req.params.id);
-
-      const bin = await Bin.findOneAndDelete({
-        binId,
-      });
-
-      if (!bin) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            code: "BIN_NOT_FOUND",
-            message: "Bin not found",
-          },
-        });
-      }
-
-      await createAuditLog({
-        req,
-        action: "DELETE_BIN",
-        binId,
-        details: {
-          name: bin.name,
-          location: bin.location,
+          action,
+          deviceId: device.deviceId,
+          delivery: "device-poll",
+          message:
+            action === "lock" ? "Lock command queued" : "Unlock command queued",
         },
       });
 
@@ -320,121 +204,204 @@ router.delete(
         success: true,
         data: {
           binId,
-          message: "Bin deleted successfully",
+          action,
+          requestedBy: {
+            id: req.user?.id,
+            email: req.user?.email,
+            role: req.user?.role,
+          },
+          timestamp: new Date().toISOString(),
         },
       });
     } catch (error) {
-      console.error("Delete bin error:", error);
-
+      console.error("Lock API error:", error);
       res.status(500).json({
         success: false,
         error: {
-          code: "BIN_DELETE_FAILED",
-          message: "Unable to delete bin",
+          code: "LOCK_COMMAND_FAILED",
+          message: "Unable to send lock command",
         },
       });
     }
-  }
+  },
 );
+
+/**
+ * PUT /api/bins/:id
+ * แก้ไขข้อมูลถัง
+ */
+router.put("/:id", authenticate, requireRole("admin"), async (req, res) => {
+  try {
+    const binId = String(req.params.id);
+    const { name, location, mqttTopic, thresholdPct } = req.body;
+
+    const updateData: {
+      name?: string;
+      location?: string;
+      mqttTopic?: string;
+      thresholdPct?: number;
+    } = {};
+
+    if (name !== undefined) updateData.name = String(name).trim();
+    if (location !== undefined) updateData.location = String(location).trim();
+    if (mqttTopic !== undefined)
+      updateData.mqttTopic = String(mqttTopic).trim();
+
+    if (thresholdPct !== undefined) {
+      const value = Number(thresholdPct);
+      if (Number.isNaN(value) || value < 0 || value > 100) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_THRESHOLD",
+            message: "thresholdPct must be between 0 and 100",
+          },
+        });
+      }
+      updateData.thresholdPct = value;
+    }
+
+    const bin = await Bin.findOneAndUpdate(
+      { binId },
+      { $set: updateData },
+      { new: false, runValidators: true },
+    );
+
+    if (!bin) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "BIN_NOT_FOUND", message: "Bin not found" },
+      });
+    }
+
+    await createAuditLog({
+      req,
+      action: "UPDATE_BIN",
+      binId,
+      details: {
+        changes: updateData,
+        before: Object.fromEntries(
+          Object.keys(updateData).map((key) => [key, bin.get(key)]),
+        ),
+        after: updateData,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: { ...bin.toObject(), ...updateData },
+    });
+  } catch (error) {
+    console.error("Update bin error:", error);
+    res.status(500).json({
+      success: false,
+      error: { code: "BIN_UPDATE_FAILED", message: "Unable to update bin" },
+    });
+  }
+});
+
+/**
+ * DELETE /api/bins/:id
+ * ลบถัง
+ */
+router.delete("/:id", authenticate, requireRole("admin"), async (req, res) => {
+  try {
+    const binId = String(req.params.id);
+    const bin = await Bin.findOneAndDelete({ binId });
+
+    if (!bin) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "BIN_NOT_FOUND", message: "Bin not found" },
+      });
+    }
+
+    await createAuditLog({
+      req,
+      action: "DELETE_BIN",
+      binId,
+      details: { name: bin.name, location: bin.location },
+    });
+
+    res.json({
+      success: true,
+      data: { binId, message: "Bin deleted successfully" },
+    });
+  } catch (error) {
+    console.error("Delete bin error:", error);
+    res.status(500).json({
+      success: false,
+      error: { code: "BIN_DELETE_FAILED", message: "Unable to delete bin" },
+    });
+  }
+});
 
 /**
  * GET /api/bins/:id/telemetry
  * ดูประวัติ Telemetry
- * admin / staff / viewer
- *
- * รองรับ:
- * ?page=1
- * ?limit=10
- * ?startDate=2026-09-01
- * ?endDate=2026-09-15
  */
-router.get(
-  "/:id/telemetry",
-  authenticate,
-  async (req, res) => {
+router.get("/:id/telemetry", authenticate, async (req, res) => {
+  try {
+    const binId = String(req.params.id);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 100);
+
+    let timestamp: ReturnType<typeof thaiDateFilter>;
     try {
-      const binId = String(req.params.id);
-
-      const page = Math.max(
-        Number(req.query.page) || 1,
-        1
+      timestamp = thaiDateFilter(
+        req.query.startDate ? String(req.query.startDate) : undefined,
+        req.query.endDate ? String(req.query.endDate) : undefined,
       );
-
-      const limit = Math.min(
-        Math.max(
-          Number(req.query.limit) || 10,
-          1
-        ),
-        100
-      );
-
-      let timestamp: ReturnType<typeof thaiDateFilter>;
-      try {
-        timestamp = thaiDateFilter(
-          req.query.startDate ? String(req.query.startDate) : undefined,
-          req.query.endDate ? String(req.query.endDate) : undefined,
-        );
-      } catch (error) {
-        return res.status(400).json({
-          success: false,
-          error: { code: "INVALID_DATE_RANGE", message: error instanceof Error ? error.message : "Invalid date range" },
-        });
-      }
-      const filter = {
-        binId,
-        ...(Object.keys(timestamp).length ? { timestamp } : {}),
-      };
-      const skip =
-        (page - 1) * limit;
-
-      const [data, total] =
-        await Promise.all([
-          Telemetry.find(filter)
-            .sort({
-              timestamp: -1,
-            })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
-
-          Telemetry.countDocuments(
-            filter
-          ),
-        ]);
-
-      const totalPages =
-        Math.ceil(total / limit);
-
-      res.json({
-        success: true,
-        data,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages,
-          hasNextPage:
-            page < totalPages,
-          hasPreviousPage:
-            page > 1,
-        },
-      });
     } catch (error) {
-      console.error(
-        "Telemetry fetch error:",
-        error
-      );
-
-      res.status(500).json({
+      return res.status(400).json({
         success: false,
         error: {
-          code: "TELEMETRY_FETCH_FAILED",
+          code: "INVALID_DATE_RANGE",
           message:
-            "Unable to fetch telemetry",
+            error instanceof Error ? error.message : "Invalid date range",
         },
       });
     }
+
+    const filter = {
+      binId,
+      ...(Object.keys(timestamp).length ? { timestamp } : {}),
+    };
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      Telemetry.find(filter)
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Telemetry.countDocuments(filter),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    res.json({
+      success: true,
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Telemetry fetch error:", error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "TELEMETRY_FETCH_FAILED",
+        message: "Unable to fetch telemetry",
+      },
+    });
   }
-);
+});
 
 export default router;
