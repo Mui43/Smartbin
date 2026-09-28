@@ -1,184 +1,171 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import { sendLineMessage, replyLineMessage } from "../services/line";
-import { getDb } from "../lib/mongodb";
-import { DeviceDocument } from "../types/device";
+import { sendLineMessage, replyLineMessage } from "../services/line.js";
+import { buildStatusMessage } from "../line/statusMessage.js";
+import { Device } from "../models/device.js";
+import { Bin } from "../models/bin.js";
+import { cancelLineCommand } from "../line/commandResults.js";
 
 const router = Router();
 
-// Middleware ตรวจสอบ LINE Signature
-const verifyLineSignature = (req: Request, res: Response, next: Function) => {
-  const channelSecret = process.env.LINE_CHANNEL_SECRET;
-  const signature = req.headers["x-line-signature"] as string;
-
-  if (!channelSecret || !signature) {
-    return res.status(401).json({ error: "Missing secret or signature" });
+export function verifyLineSignature(req: Request, res: Response, next: NextFunction) {
+  const secret = process.env.LINE_CHANNEL_SECRET?.trim();
+  const signature = req.header("x-line-signature");
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  if (!secret || !signature || !rawBody) return res.status(401).json({ error: "Missing LINE signature or raw body" });
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest();
+  const supplied = Buffer.from(signature, "base64");
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+    return res.status(401).json({ error: "Invalid LINE signature" });
   }
-
-  const body =
-    typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-  const hash = crypto
-    .createHmac("sha256", channelSecret)
-    .update(body)
-    .digest("base64");
-
-  if (hash !== signature) {
-    return res.status(401).json({ error: "Invalid signature" });
-  }
-
   next();
-};
+}
 
-// 1. POST /api/line/test
-router.post("/test", async (_req: Request, res: Response) => {
+export function parseLineAction(event: any) {
+  const raw = event?.type === "postback" ? event.postback?.data
+    : event?.type === "message" && event.message?.type === "text" ? event.message.text : "";
+  if (event?.type === "postback") {
+    const params = new URLSearchParams(String(raw || ""));
+    if (["lock_bin", "unlock_bin", "restart_bin"].includes(params.get("action") || "") && params.get("binId")) return params.get("action");
+  }
+  const normalized = String(raw || "").trim().toLowerCase().replace(/^action\s*=\s*/, "");
+  if (["เริ่มต้นเช็คสถานะ", "เช็คสถานะ", "ตรวจสอบสถานะ", "สถานะ", "status", "start_status"].includes(normalized)) return "status";
+  if (["on", "off", "clear"].includes(normalized)) return normalized;
+  return null;
+}
+
+function postbackBinId(event: any) {
+  if (event?.type !== "postback") return null;
+  return new URLSearchParams(String(event.postback?.data || "")).get("binId");
+}
+
+function replyDestination(event: any): string | null {
+  const source = event?.source;
+  if (source?.type === "group") return source.groupId || null;
+  if (source?.type === "room") return source.roomId || null;
+  return source?.userId || null;
+}
+
+async function queueDeviceCommand(event: any, replyToken: string, device: InstanceType<typeof Device> | null, action: "lock" | "unlock" | "restart", binName: string) {
+  const verb = action === "lock" ? "ล็อกถัง" : action === "unlock" ? "ปลดล็อกถัง" : "รีสตาร์ต ESP32";
+  if (!device) return replyLineMessage(replyToken, `❌ สั่ง${verb} ${binName} ไม่สำเร็จ: ไม่พบ${action === "restart" ? " ESP32" : " Servo Lock"} ที่ลงทะเบียน`);
+  const to = replyDestination(event);
+  if (!to) return replyLineMessage(replyToken, `❌ สั่ง${verb} ${binName} ไม่สำเร็จ: ไม่มีปลายทาง LINE สำหรับแจ้งผลหลังอุปกรณ์ตอบกลับ`);
+  if (device.status !== "online" || !device.lastSeen || Date.now() - new Date(device.lastSeen).getTime() > 60_000) {
+    return replyLineMessage(replyToken, `❌ สั่ง${verb} ${binName} ไม่สำเร็จ: ${action === "restart" ? "ESP32" : "Servo Lock"} ออฟไลน์หรือไม่ได้ส่ง heartbeat ใน 60 วินาที`);
+  }
+  if (action === "restart" && !device.bootId) {
+    return replyLineMessage(replyToken, `❌ สั่ง${verb} ${binName} ไม่สำเร็จ: ESP32 ยังไม่ส่งรหัสการเริ่มระบบ กรุณาอัปโหลดเฟิร์มแวร์เวอร์ชันใหม่`);
+  }
+  if (device.pendingCommand || device.lineCommand) {
+    return replyLineMessage(replyToken, `❌ สั่ง${verb} ${binName} ไม่สำเร็จ: อุปกรณ์มีคำสั่งก่อนหน้าค้างอยู่ กรุณารอผลหรือเคลียร์คำสั่ง`);
+  }
+  const desired = action === "lock" ? "on" : action === "unlock" ? "off" : "restart";
+  if (action !== "restart" && device.state === desired) {
+    return replyLineMessage(replyToken, `✅ ${binName} ${action === "lock" ? "ล็อกอยู่แล้ว" : "ปลดล็อกอยู่แล้ว"} ตามสถานะล่าสุดที่ ESP32 รายงาน`);
+  }
+  const now = new Date();
+  const queued = await Device.findOneAndUpdate(
+    { _id: device._id, pendingCommand: null, lineCommand: null, status: "online", lastSeen: { $gt: new Date(now.getTime() - 60_000) } },
+    { $set: {
+      pendingCommand: desired,
+      lineCommand: {
+        to, action, binName, requestedAt: now,
+        deadlineAt: new Date(now.getTime() + (action === "restart" ? 90_000 : 45_000)),
+        phase: "queued", bootIdAtRequest: action === "restart" ? device.bootId : undefined,
+        retryKey: crypto.randomUUID(),
+      },
+    } },
+    { new: true },
+  );
+  if (!queued) return replyLineMessage(replyToken, `❌ สั่ง${verb} ${binName} ไม่สำเร็จ: สถานะอุปกรณ์เปลี่ยนหรือมีคำสั่งอื่นเข้ามาก่อน`);
+  return replyLineMessage(replyToken, `⏳ รับคำสั่ง${verb} ${binName} แล้ว กำลังรอ ESP32 ยืนยันผล จะส่งข้อความแจ้งว่าสำเร็จหรือสาเหตุที่ไม่สำเร็จ`);
+}
+
+router.post("/test", async (_req, res) => {
   try {
-    await sendLineMessage(
-      "🤖 Smart Bin Test\n\nระบบเชื่อมต่อ LINE สำเร็จแล้ว ✅",
-    );
-    return res.json({ success: true, message: "LINE message sent" });
+    await sendLineMessage("🤖 Smart Bin Test\n\nระบบเชื่อมต่อ LINE สำเร็จแล้ว ✅");
+    res.json({ success: true, message: "LINE message sent" });
   } catch (error) {
     console.error("LINE test error:", error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: "LINE_SEND_FAILED",
-        message: "Unable to send LINE message",
-      },
-    });
+    res.status(500).json({ success: false, error: { code: "LINE_SEND_FAILED", message: "Unable to send LINE message" } });
   }
 });
 
-// 2. POST /api/line/webhook
-router.post(
-  "/webhook",
-  verifyLineSignature,
-  async (req: Request, res: Response) => {
-    try {
-      const events = req.body.events || [];
-      const allowedUserIds = (process.env.ALLOWED_USER_IDS || "")
-        .split(",")
-        .map((id) => id.trim());
-
-      for (const event of events) {
-        const userId = event.source?.userId;
-
-        // 🟢 ปริ้นท์ Log แสดง LINE User ID และ Event ทุกครั้งที่มีคนส่งข้อความหรือกดปุ่ม
-        console.log("\n========================================");
-        console.log(`📩 New Event from User ID: [ ${userId} ]`);
-
-        if (event.type === "message" && event.message.type === "text") {
-          console.log(`💬 Message Text: "${event.message.text}"`);
-        } else if (event.type === "postback") {
-          console.log(`🔘 Postback Data: "${event.postback.data}"`);
+router.post("/webhook", verifyLineSignature, async (req, res) => {
+  try {
+    const allowedIds = (process.env.ALLOWED_USER_IDS || "").split(",").map(id => id.trim()).filter(Boolean);
+    const allowAll = allowedIds.length === 0 || allowedIds.includes("*");
+    for (const event of req.body?.events || []) {
+      const replyToken = event.replyToken;
+      if (!replyToken) continue;
+      try {
+      const userId = event.source?.userId;
+      if (!allowAll && (!userId || !allowedIds.includes(userId))) {
+        await replyLineMessage(replyToken, "⛔ คุณไม่มีสิทธิ์ใช้งานระบบนี้");
+        continue;
+      }
+      const action = parseLineAction(event);
+      if (action === "status") {
+        await replyLineMessage(replyToken, await buildStatusMessage());
+        continue;
+      }
+      if (action === "lock_bin" || action === "unlock_bin" || action === "restart_bin") {
+        const binId = postbackBinId(event);
+        const bin = binId ? await Bin.findOne({ binId }).lean() : null;
+        if (!bin) {
+          await replyLineMessage(replyToken, "❌ สั่งงานไม่สำเร็จ: ไม่พบถังขยะนี้ในระบบ");
+          continue;
         }
-        console.log("========================================\n");
-
-        // Check Whitelist
-        // 🟢 ถ้ากำหนด ALLOWED_USER_IDS เป็น "*" หรือไม่มีการระบุ ให้ข้ามการเช็ค Whitelist (อนุญาตทุกคน)
-        const allowAll = process.env.ALLOWED_USER_IDS === "*";
-
-        if (!allowAll && (!userId || !allowedUserIds.includes(userId))) {
-          console.warn(
-            `⚠️ Unauthorized access attempt from User ID: ${userId}`,
-          );
-          if (event.replyToken) {
-            await replyLineMessage(
-              event.replyToken,
-              "⛔ คุณไม่มีสิทธิ์ใช้งานระบบนี้ (Unauthorized)",
-            );
+        const command = action === "lock_bin" ? "lock" : action === "unlock_bin" ? "unlock" : "restart";
+        const device = command === "restart"
+          ? await Device.findOne({ binId: bin.binId, type: "ESP32" })
+          : await Device.findOne({ binId: bin.binId, type: "SERVO_MOTOR", deviceId: /^servo-lock-/i });
+        await queueDeviceCommand(event, replyToken, device, command, bin.name || bin.binId);
+        continue;
+      }
+      if (action === "on" || action === "off" || action === "clear") {
+        const deviceId = process.env.LINE_CONTROL_DEVICE_ID?.trim() || "servo-lock-A001";
+        const device = await Device.findOne({ deviceId });
+        if (!device) {
+          await replyLineMessage(replyToken, `❌ สั่งงานไม่สำเร็จ: ไม่พบอุปกรณ์ ${deviceId} ในระบบ`);
+          continue;
+        }
+        if (action === "clear") {
+          if (!device.pendingCommand && !device.lineCommand) {
+            await replyLineMessage(replyToken, "✅ ไม่มีคำสั่งค้างอยู่แล้ว");
+          } else {
+            if (device.lineCommand?.phase === "result") {
+              device.lineCommand = null;
+              device.pendingCommand = null;
+              await device.save();
+            } else if (device.lineCommand) await cancelLineCommand(device);
+            else { device.pendingCommand = null; await device.save(); }
+            await replyLineMessage(replyToken, "✅ เคลียร์คำสั่งที่ค้างอยู่แล้ว");
           }
           continue;
         }
-
-        let action: string | null = null;
-
-        // รองรับกรณีรับค่าแบบ Text จาก Rich Menu (On, Off, Status, Clear)
-        if (event.type === "message" && event.message.type === "text") {
-          // แปลงข้อความให้เป็นอักษรเล็ก และตัดช่องว่างออก
-          let text = event.message.text.trim().toLowerCase();
-
-          // ตัดคำว่า "action = " ออกหากผู้ใช้ส่งรูปแบบ "Action = On" หรือ "Action = Status" มา
-          if (text.startsWith("action = ")) {
-            text = text.replace("action = ", "").trim();
-          }
-
-          if (["on", "off", "status", "clear"].includes(text)) {
-            action = text;
-          }
-        }
-
-        // ถ้ามี Action ตรงตามคำสั่ง ให้ประมวลผลคำสั่งลง MongoDB
-        if (action) {
-          const deviceId = "esp32-01";
-          const db = await getDb();
-          const collection = db.collection<DeviceDocument>("devices");
-          const now = new Date();
-
-          if (action === "on" || action === "off") {
-            await collection.updateOne(
-              { deviceId },
-              {
-                $set: {
-                  pendingCommand: action,
-                  lastCommandBy: userId,
-                  lastCommandAt: now,
-                },
-              },
-              { upsert: true },
-            );
-
-            const actionText = action === "on" ? "เปิด" : "ปิด";
-            await replyLineMessage(
-              event.replyToken,
-              `🟢 บันทึกคำสั่ง "${actionText}เครื่อง" เรียบร้อยแล้ว กำลังส่งไปยังอุปกรณ์...`,
-            );
-          } else if (action === "status") {
-            const device = await collection.findOne({ deviceId });
-            if (!device) {
-              await replyLineMessage(
-                event.replyToken,
-                "⚠️ ไม่พบข้อมูลอุปกรณ์ในระบบ",
-              );
-              continue;
-            }
-
-            const isOnline =
-              device.lastSeen &&
-              now.getTime() - new Date(device.lastSeen).getTime() < 30000;
-
-            const statusText =
-              `📡 สถานะอุปกรณ์ (${deviceId})\n` +
-              `• การเชื่อมต่อ: ${isOnline ? "🟢 ออนไลน์" : "🔴 ออฟไลน์"}\n` +
-              `• สถานะปัจจุบัน: ${device.state || "unknown"}\n` +
-              `• คำสั่งที่ค้างอยู่: ${device.pendingCommand || "ไม่มี"}`;
-
-            await replyLineMessage(event.replyToken, statusText);
-          } else if (action === "clear") {
-            await collection.updateOne(
-              { deviceId },
-              {
-                $set: {
-                  pendingCommand: null,
-                  state: "unknown",
-                },
-              },
-              { upsert: true },
-            );
-
-            await replyLineMessage(
-              event.replyToken,
-              "🧹 ล้างสถานะอุปกรณ์เรียบร้อยแล้ว",
-            );
-          }
+        const bin = await Bin.findOne({ binId: device.binId }).lean();
+        await queueDeviceCommand(event, replyToken, device, action === "on" ? "lock" : "unlock", bin?.name || device.binId);
+        continue;
+      }
+      if (event.type === "postback" || (event.type === "message" && event.message?.type === "text")) {
+        await replyLineMessage(replyToken, "❌ ไม่รู้จักคำสั่งนี้ กรุณาเลือกคำสั่งจากการ์ดสถานะหรือเมนู LINE");
+      }
+      } catch (error) {
+        console.error("LINE command failed:", error);
+        try {
+          await replyLineMessage(replyToken, "❌ สั่งงานไม่สำเร็จ: ระบบไม่สามารถบันทึกหรือส่งคำสั่งได้ กรุณาลองใหม่อีกครั้ง");
+        } catch (replyError) {
+          console.error("LINE failure reply failed:", replyError);
         }
       }
-
-      return res.status(200).json({ success: true });
-    } catch (error) {
-      console.error("LINE Webhook Error:", error);
-      return res.status(500).json({ error: "Internal Server Error" });
     }
-  },
-);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("LINE webhook failed:", error);
+    res.status(500).json({ success: false, error: { message: "LINE webhook failed" } });
+  }
+});
 
 export default router;

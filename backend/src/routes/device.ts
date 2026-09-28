@@ -5,6 +5,7 @@ import { Device } from "../models/device.js";
 import { Bin } from "../models/bin.js";
 import { authenticate } from "../middleware/auth.js";
 import { broadcastRealtime } from "./realtime.js";
+import { confirmRestart, confirmServoCommand } from "../line/commandResults.js";
 
 const router = Router();
 
@@ -59,6 +60,7 @@ router.get("/poll", async (req, res) => {
   }
 
   const deviceId = String(req.query.deviceId || "").trim();
+  const bootId = String(req.query.bootId || "").trim();
   if (!deviceId) {
     return res.status(400).json({ success: false, error: { message: "deviceId is required" } });
   }
@@ -69,6 +71,10 @@ router.get("/poll", async (req, res) => {
       return res.status(404).json({ success: false, error: { message: "Device not registered" } });
     }
 
+    if (device.type === "ESP32" && bootId && /^[a-fA-F0-9]{1,32}$/.test(bootId)) {
+      await confirmRestart(device, bootId);
+      device.bootId = bootId;
+    }
     device.status = "online";
     device.lastSeen = new Date();
     await device.save();
@@ -78,6 +84,32 @@ router.get("/poll", async (req, res) => {
   } catch (error) {
     console.error("Device poll error:", error);
     return res.status(500).json({ success: false, error: { message: "Device poll failed" } });
+  }
+});
+
+// Clear a restart only after the controller has received it successfully.
+router.post("/ack-restart", async (req, res) => {
+  if (!hasDeviceKey(req)) {
+    return res.status(401).json({ success: false, error: { message: "Invalid device API key" } });
+  }
+  const deviceId = String(req.body?.deviceId || "").trim();
+  if (!deviceId) return res.status(400).json({ success: false, error: { message: "deviceId is required" } });
+  try {
+    const pending = await Device.findOne({ deviceId, type: "ESP32", pendingCommand: "restart" });
+    if (!pending) return res.status(409).json({ success: false, error: { message: "No restart command pending" } });
+    const update = pending.lineCommand?.action === "restart"
+      ? { $set: { pendingCommand: null, "lineCommand.phase": "restarting", "lineCommand.deadlineAt": new Date(Date.now() + 90_000) } }
+      : { $set: { pendingCommand: null } };
+    const device = await Device.findOneAndUpdate(
+      { deviceId, type: "ESP32", pendingCommand: "restart" },
+      update,
+      { new: true },
+    );
+    if (!device) return res.status(409).json({ success: false, error: { message: "No restart command pending" } });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Restart acknowledgement failed:", error);
+    return res.status(500).json({ success: false, error: { message: "Restart acknowledgement failed" } });
   }
 });
 
@@ -98,12 +130,15 @@ router.post("/report", async (req, res) => {
       return res.status(404).json({ success: false, error: { message: "Device not registered" } });
     }
 
-    device.state = state;
-    device.status = "online";
-    device.lastSeen = new Date();
-    if (device.pendingCommand === state) device.pendingCommand = null;
-    await device.save();
-    broadcastDevice(device);
+    const confirmed = await confirmServoCommand(device, state);
+    if (!confirmed) {
+      device.state = state;
+      device.status = "online";
+      device.lastSeen = new Date();
+      if (device.pendingCommand === state && !device.lineCommand) device.pendingCommand = null;
+      await device.save();
+    }
+    broadcastDevice(confirmed || device);
 
     return res.json({ success: true });
   } catch (error) {

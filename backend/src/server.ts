@@ -14,6 +14,7 @@ import lockRouter from "./routes/lock.js";
 import alertsRouter from "./routes/alerts.js";
 import lineRouter from "./routes/line.js";
 import { startAlertChecker } from "./alerts/notifyAlerts.js";
+import { startLineCommandChecker } from "./line/commandResults.js";
 import authRouter from "./routes/auth.js";
 import logsRouter from "./routes/logs.js";
 import exportRouter from "./routes/export.js";
@@ -37,7 +38,9 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ verify: (req, _res, buffer) => {
+  if (req.url?.startsWith("/api/line/webhook")) (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+} }));
 
 app.use(pinoHttp());
 
@@ -149,6 +152,7 @@ async function startServer() {
 
     startMqtt();
     startAlertChecker();
+    startLineCommandChecker();
 
     app.listen(
       PORT,

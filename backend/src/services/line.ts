@@ -4,15 +4,19 @@ const LINE_PUSH_URL =
 const LINE_REPLY_URL =
   "https://api.line.me/v2/bot/message/reply";
 
-export async function sendLineMessage(message: string) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
-  const userId = process.env.LINE_TARGET_USER_ID?.trim();
+export type LineMessage =
+  | { type: "text"; text: string }
+  | { type: "flex"; altText: string; contents: Record<string, unknown> };
 
-  if (!token || !userId) {
-    throw new Error(
-      "LINE Access Token or Target User ID missing"
-    );
-  }
+export async function sendLineMessage(message: string) {
+  const userId = process.env.LINE_TARGET_USER_ID?.trim();
+  if (!userId) throw new Error("LINE Target User ID missing");
+  return sendLineMessageTo(userId, message);
+}
+
+export async function sendLineMessageTo(to: string, message: string, retryKey?: string) {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
+  if (!token || !to) throw new Error("LINE Access Token or recipient missing");
 
   console.log("📤 LINE: sending push message...");
 
@@ -22,9 +26,10 @@ export async function sendLineMessage(message: string) {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      ...(retryKey ? { "X-Line-Retry-Key": retryKey } : {}),
     },
     body: JSON.stringify({
-      to: userId,
+      to,
       messages: [
         {
           type: "text",
@@ -41,7 +46,7 @@ export async function sendLineMessage(message: string) {
     `📨 LINE API response: ${responseText || "(empty)"}`
   );
 
-  if (!response.ok) {
+  if (!response.ok && !(retryKey && response.status === 409)) {
     throw new Error(
       `LINE API Error: ${response.status} ${responseText}`
     );
@@ -54,9 +59,9 @@ export async function sendLineMessage(message: string) {
 
 export async function replyLineMessage(
   replyToken: string,
-  message: string
+  message: string | LineMessage
 ) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
 
   if (!token) {
     throw new Error(
@@ -65,6 +70,7 @@ export async function replyLineMessage(
   }
 
   const response = await fetch(LINE_REPLY_URL, {
+    signal: AbortSignal.timeout(15_000),
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -72,12 +78,7 @@ export async function replyLineMessage(
     },
     body: JSON.stringify({
       replyToken,
-      messages: [
-        {
-          type: "text",
-          text: message,
-        },
-      ],
+      messages: [typeof message === "string" ? { type: "text", text: message } : message],
     }),
   });
 

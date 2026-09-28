@@ -40,6 +40,8 @@ const char* DEVICE_API_KEY =
 const char* ESP32_DEVICE_ID =
   "ESP32-A001";
 
+String bootId;
+
 const char* IR_DEVICE_ID =
   "IR-A001";
 
@@ -339,6 +341,20 @@ void connectMQTT() {
 // Device Heartbeat
 // =====================================================
 
+bool acknowledgeRestart() {
+  HTTPClient acknowledgement;
+  acknowledgement.setConnectTimeout(1000);
+  acknowledgement.setTimeout(1500);
+  acknowledgement.begin(String(SERVER_URL) + "/api/device/ack-restart");
+  acknowledgement.addHeader("Content-Type", "application/json");
+  acknowledgement.addHeader("x-api-key", DEVICE_API_KEY);
+  const String payload = String("{\"deviceId\":\"") + ESP32_DEVICE_ID + "\"}";
+  const int status = acknowledgement.POST(payload);
+  if (status != 200) Serial.printf("Restart acknowledgement failed: %d\n", status);
+  acknowledgement.end();
+  return status == 200;
+}
+
 void sendDeviceHeartbeat(
   const char* deviceId
 ) {
@@ -359,6 +375,7 @@ void sendDeviceHeartbeat(
     String(SERVER_URL) +
     "/api/device/poll?deviceId=" +
     deviceId;
+  if (String(deviceId) == ESP32_DEVICE_ID) url += "&bootId=" + bootId;
 
   http.begin(url);
 
@@ -369,6 +386,14 @@ void sendDeviceHeartbeat(
 
   int httpCode =
     http.GET();
+
+  bool restartRequested = false;
+  if (httpCode == 200 && String(deviceId) == ESP32_DEVICE_ID) {
+    String response = http.getString();
+    response.replace(" ", "");
+    response.replace("\n", "");
+    restartRequested = response.indexOf("\"command\":\"restart\"") >= 0;
+  }
 
   if (httpCode == 200 && String(deviceId) == SERVO_LOCK_DEVICE_ID) {
     String response = http.getString();
@@ -412,6 +437,12 @@ void sendDeviceHeartbeat(
   }
 
   http.end();
+  if (restartRequested && acknowledgeRestart()) {
+    Serial.println("Restart command acknowledged; restarting ESP32");
+    Serial.flush();
+    delay(100);
+    ESP.restart();
+  }
 }
 
 // =====================================================
@@ -645,6 +676,7 @@ void setup() {
   Serial.begin(
     115200
   );
+  bootId = String(esp_random(), HEX);
 
   // ===================================================
   // Sensors
