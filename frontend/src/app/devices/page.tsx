@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -73,12 +74,12 @@ export default function DevicesPage() {
         };
 
         const [binsResponse, devicesResponse] = await Promise.all([
-          fetch(`${API_URL}/api/bins`, {
+          apiFetch(`${API_URL}/api/bins`, {
             headers,
             cache: "no-store",
             signal,
           }),
-          fetch(`${API_URL}/api/device`, {
+          apiFetch(`${API_URL}/api/device`, {
             headers,
             cache: "no-store",
             signal,

@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -7,7 +8,10 @@ import {
   WifiOff,
   Trash2,
   Plus,
+  Pencil,
+  Loader2,
 } from "lucide-react";
+import Swal from "sweetalert2";
 
 import { useTelemetry, type TelemetryData } from "@/hooks/useTelemetry";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -23,11 +27,13 @@ import AlertBanner from "@/components/ui/AlertBanner";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import AddBinForm from "@/components/dashboard/AddBinForm";
+import EditBinForm from "@/components/dashboard/EditBinForm";
 
 interface DashboardBin {
   binId: string;
   name: string;
   location: string;
+  thresholdPct: number;
   level: number | null;
   batteryPct: number | null;
   voltage: number | null;
@@ -44,7 +50,49 @@ export default function Home() {
   const [binsLoading, setBinsLoading] = useState(true);
   const [binsError, setBinsError] = useState("");
   const [showAddBin, setShowAddBin] = useState(false);
+  const [editingBinId, setEditingBinId] = useState<string | null>(null);
+  const [deletingBinId, setDeletingBinId] = useState<string | null>(null);
   const [binNotice, setBinNotice] = useState("");
+
+  async function deleteBin(bin: DashboardBin) {
+    const token = session?.user?.accessToken;
+    if (!token || deletingBinId) return;
+    const confirmation = await Swal.fire({
+      title: `ลบถัง ${bin.name}?`,
+      text: `ถัง ${bin.binId} จะถูกนำออกจาก Dashboard ข้อมูลอุปกรณ์และประวัติเดิมยังคงอยู่`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "ลบถัง",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#e11d48",
+      background: "#131822",
+      color: "#ffffff",
+    });
+    if (!confirmation.isConfirmed) return;
+
+    setDeletingBinId(bin.binId);
+    setBinsError("");
+    setBinNotice("");
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const response = await apiFetch(`${apiUrl}/api/bins/${encodeURIComponent(bin.binId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result?.error?.message || "ลบถังไม่สำเร็จ");
+      }
+      setBins((current) => current.filter((item) => item.binId !== bin.binId));
+      if (selectedBinId === bin.binId) setSelectedBinId(null);
+      if (editingBinId === bin.binId) setEditingBinId(null);
+      setBinNotice(`ลบถัง ${bin.name} แล้ว`);
+    } catch (cause) {
+      setBinsError(cause instanceof Error ? cause.message : "ไม่สามารถลบถังได้");
+    } finally {
+      setDeletingBinId(null);
+    }
+  }
 
   useEffect(() => {
     const token = session?.user?.accessToken;
@@ -56,7 +104,7 @@ export default function Home() {
     async function loadBins() {
       try {
         setBinsLoading(true);
-        const response = await fetch(`${apiUrl}/api/bins`, {
+        const response = await apiFetch(`${apiUrl}/api/bins`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
           signal: controller.signal,
@@ -83,6 +131,7 @@ export default function Home() {
     ? selectedBinId
     : bins[0]?.binId;
   const activeBin = bins.find((bin) => bin.binId === activeBinId);
+  const editingBin = bins.find((bin) => bin.binId === editingBinId);
   const telemetry = activeBinId ? telemetryByBin[activeBinId] : undefined;
   const snapshot: TelemetryData | null = activeBin?.lastSeen
     ? {
@@ -165,11 +214,11 @@ export default function Home() {
             <h2 className="text-lg font-bold text-white">เลือกถังขยะ</h2>
             <p className="text-sm text-slate-400">เลือกถังเพื่อดูข้อมูลของถังนั้น</p>
             </div>
-            {session?.user?.role === "admin" && !showAddBin && (
+            {session?.user?.role === "admin" && !showAddBin && !editingBinId && (
               <button
                 type="button"
                 disabled={binsLoading}
-                onClick={() => { setShowAddBin(true); setBinNotice(""); }}
+                onClick={() => { setShowAddBin(true); setEditingBinId(null); setBinNotice(""); }}
                 className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 transition hover:bg-emerald-500/20 disabled:opacity-50"
               >
                 <Plus size={16} /> เพิ่มถัง
@@ -191,6 +240,31 @@ export default function Home() {
               }}
             />
           )}
+          {editingBin && session?.user?.role === "admin" && session.user.accessToken && (
+            <EditBinForm
+              key={editingBin.binId}
+              bin={editingBin}
+              accessToken={session.user.accessToken}
+              onCancel={() => setEditingBinId(null)}
+              onSaved={(updated) => {
+                setBins((current) => current.map((bin) =>
+                  bin.binId === updated.binId ? { ...bin, ...updated } : bin,
+                ));
+                setEditingBinId(null);
+                setBinsError("");
+                setBinNotice(`แก้ไขถัง ${updated.name} แล้ว`);
+                void Swal.fire({
+                  title: "แก้ไขสำเร็จ",
+                  text: `บันทึกข้อมูลถัง ${updated.name} (${updated.binId}) แล้ว`,
+                  icon: "success",
+                  confirmButtonText: "ตกลง",
+                  confirmButtonColor: "#10b981",
+                  background: "#131822",
+                  color: "#ffffff",
+                });
+              }}
+            />
+          )}
           {binNotice && <p role="status" className="mb-3 text-sm text-emerald-400">{binNotice}</p>}
           {binsError && <p className="mb-3 text-sm text-rose-400">{binsError}</p>}
           {binsLoading ? (
@@ -206,28 +280,56 @@ export default function Home() {
                 const level = latest?.level ?? bin.level;
                 const selected = bin.binId === activeBinId;
                 return (
-                  <button
+                  <div
                     key={bin.binId}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => setSelectedBinId(bin.binId)}
-                    className={`rounded-2xl border p-4 text-left transition hover:border-emerald-500/60 ${
+                    className={`rounded-2xl border p-4 transition hover:border-emerald-500/60 ${
                       selected
                         ? "border-emerald-500 bg-emerald-500/10"
                         : "border-[#212b3d] bg-[#131822]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-white">{bin.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">{bin.binId}</p>
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      aria-label={`ดูข้อมูลถัง ${bin.name}`}
+                      onClick={() => setSelectedBinId(bin.binId)}
+                      className="block w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-white">{bin.name}</p>
+                          <p className="mt-1 text-xs text-slate-400">{bin.binId}</p>
+                        </div>
+                        <span className="text-sm font-semibold text-emerald-400">
+                          {level == null ? "ไม่มีข้อมูล" : `${level}%`}
+                        </span>
                       </div>
-                      <span className="text-sm font-semibold text-emerald-400">
-                        {level == null ? "ไม่มีข้อมูล" : `${level}%`}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs text-slate-400">{bin.location}</p>
-                  </button>
+                      <p className="mt-3 text-xs text-slate-400">{bin.location}</p>
+                    </button>
+                    {session?.user?.role === "admin" && (
+                      <div className="mt-3 flex justify-end gap-1 border-t border-[#293548] pt-2">
+                        <button
+                          type="button"
+                          title={`แก้ไขถัง ${bin.name}`}
+                          aria-label={`แก้ไขถัง ${bin.name}`}
+                          onClick={() => { setEditingBinId(bin.binId); setShowAddBin(false); setBinsError(""); setBinNotice(""); }}
+                          className="rounded-lg p-2 text-slate-400 transition hover:bg-[#212b3d] hover:text-emerald-400 focus-visible:outline-2 focus-visible:outline-emerald-400"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          title={`ลบถัง ${bin.name}`}
+                          aria-label={`ลบถัง ${bin.name}`}
+                          disabled={deletingBinId !== null}
+                          onClick={() => deleteBin(bin)}
+                          className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-400 focus-visible:outline-2 focus-visible:outline-rose-400 disabled:opacity-50"
+                        >
+                          {deletingBinId === bin.binId ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -271,7 +373,7 @@ export default function Home() {
           <>
             {/* Overview */}
             <section>
-              <BinOverview telemetry={activeTelemetry} />
+              <BinOverview telemetry={activeTelemetry} binName={activeBin?.name ?? "ถังขยะ"} />
             </section>
           </>
         )}

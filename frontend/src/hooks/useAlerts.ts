@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -53,7 +54,7 @@ export function useAlerts() {
         process.env.NEXT_PUBLIC_API_URL ||
         "http://localhost:4000";
 
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_URL}/api/alerts`,
         {
           method: "GET",

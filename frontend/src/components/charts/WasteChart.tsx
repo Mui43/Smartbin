@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -92,7 +93,7 @@ export default function WasteChart({ binId }: { binId: string }) {
 
         if (range === "month") params.set("month", month);
 
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_URL}/api/waste-stats?${params.toString()}`,
           {
             signal: controller.signal,

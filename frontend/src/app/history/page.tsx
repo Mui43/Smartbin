@@ -1,12 +1,11 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import {
   Search,
   Download,
-  ChevronLeft,
-  ChevronRight,
   FileX,
   Loader2,
   RefreshCw,
@@ -21,6 +20,7 @@ import {
 import Swal from "sweetalert2";
 
 import Sidebar from "@/components/layout/Sidebar";
+import PaginationControls from "@/components/ui/PaginationControls";
 import { useTelemetryHistory } from "@/hooks/useTelemetryHistory";
 
 interface Bin {
@@ -70,7 +70,7 @@ export default function HistoryPage() {
 
       try {
         setBinsError("");
-        const response = await fetch(`${API_URL}/api/bins`, {
+        const response = await apiFetch(`${API_URL}/api/bins`, {
           headers: { Authorization: `Bearer ${accessToken}` },
           cache: "no-store",
           signal: controller.signal,
@@ -186,7 +186,7 @@ export default function HistoryPage() {
       if (activeStartDate) params.set("startDate", activeStartDate);
       if (activeEndDate) params.set("endDate", activeEndDate);
 
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_URL}/api/export/telemetry?${params.toString()}`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -508,16 +508,15 @@ export default function HistoryPage() {
                 </table>
               </div>
 
-              {/* Pagination */}
-              <Pagination
-                page={pagination?.page || 1}
-                totalPages={pagination?.totalPages || 1}
-                hasPrevious={pagination?.hasPreviousPage || false}
-                hasNext={pagination?.hasNextPage || false}
-                onPrevious={() => setPage((curr) => Math.max(curr - 1, 1))}
-                onNext={() => setPage((curr) => curr + 1)}
-              />
             </>
+          )}
+          {!loading && !error && pagination && (
+            <PaginationControls
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={setPage}
+              totalItems={pagination.total}
+            />
           )}
         </section>
       </div>
@@ -679,7 +678,14 @@ function LevelCell({ value }: { value: number }) {
 function StatusBadge({ status }: { status: string }) {
   const ok = status === "ok";
   const warning = status === "warning";
-  const offline = status === "offline";
+  const error = status === "error";
+  const labels: Record<string, string> = {
+    ok: "ทำงานปกติ",
+    warning: "ควรตรวจสอบ",
+    error: "ขัดข้อง",
+    offline: "ไม่เชื่อมต่อ",
+    unknown: "ไม่ทราบสถานะ",
+  };
 
   return (
     <span
@@ -688,9 +694,9 @@ function StatusBadge({ status }: { status: string }) {
           ? "border-emerald-900 bg-emerald-950/60 text-emerald-400"
           : warning
             ? "border-amber-900 bg-amber-950/60 text-amber-400"
-            : offline
-              ? "border-slate-800 bg-slate-900/60 text-slate-400"
-              : "border-rose-900 bg-rose-950/60 text-rose-400"
+            : error
+              ? "border-rose-900 bg-rose-950/60 text-rose-400"
+              : "border-slate-800 bg-slate-900/60 text-slate-400"
       }`}
     >
       <span
@@ -699,55 +705,13 @@ function StatusBadge({ status }: { status: string }) {
             ? "bg-emerald-400"
             : warning
               ? "bg-amber-400"
-              : offline
-                ? "bg-slate-400"
-                : "bg-rose-400"
+              : error
+                ? "bg-rose-400"
+                : "bg-slate-400"
         }`}
       />
-      {status}
+      {labels[status] ?? labels.unknown}
     </span>
-  );
-}
-
-function Pagination({
-  page,
-  totalPages,
-  hasPrevious,
-  hasNext,
-  onPrevious,
-  onNext,
-}: {
-  page: number;
-  totalPages: number;
-  hasPrevious: boolean;
-  hasNext: boolean;
-  onPrevious: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between border-t border-[#212b3d] p-4 sm:p-5">
-      <button
-        onClick={onPrevious}
-        disabled={!hasPrevious}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-2 text-sm text-white transition hover:bg-[#1a2232] disabled:opacity-30"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        <span>Previous</span>
-      </button>
-
-      <span className="text-xs text-slate-400 sm:text-sm">
-        Page {page} / {totalPages}
-      </span>
-
-      <button
-        onClick={onNext}
-        disabled={!hasNext}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-2 text-sm text-white transition hover:bg-[#1a2232] disabled:opacity-30"
-      >
-        <span>Next</span>
-        <ChevronRight className="h-4 w-4" />
-      </button>
-    </div>
   );
 }
 

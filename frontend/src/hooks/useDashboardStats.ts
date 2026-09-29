@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -60,7 +61,7 @@ export function useDashboardStats(
         setError("");
 
         const response =
-          await fetch(
+          await apiFetch(
             `http://localhost:4000/api/dashboard/stats?range=${range}`,
             {
               method: "GET",

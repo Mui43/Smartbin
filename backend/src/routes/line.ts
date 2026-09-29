@@ -5,6 +5,8 @@ import { buildStatusMessage } from "../line/statusMessage.js";
 import { Device } from "../models/device.js";
 import { Bin } from "../models/bin.js";
 import { cancelLineCommand } from "../line/commandResults.js";
+import { authenticate } from "../middleware/auth.js";
+import { requireRole } from "../middleware/rbac.js";
 
 const router = Router();
 
@@ -171,7 +173,7 @@ async function queueDeviceCommand(
 }
 
 /** Send a test message to the configured LINE recipient and report delivery success or failure. */
-router.post("/test", async (_req, res) => {
+router.post("/test", authenticate, requireRole("admin"), async (_req, res) => {
   try {
     await sendLineMessage(
       "🤖 Smart Bin Test\n\nระบบเชื่อมต่อ LINE สำเร็จแล้ว ✅",

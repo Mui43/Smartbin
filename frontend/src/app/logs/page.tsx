@@ -1,12 +1,11 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import {
   Search,
   RotateCcw,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   ShieldAlert,
   Clock,
@@ -26,6 +25,7 @@ import {
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import PaginationControls from "@/components/ui/PaginationControls";
 import Swal from "sweetalert2";
 
 const actionLabels: Record<string, string> = {
@@ -36,6 +36,8 @@ const actionLabels: Record<string, string> = {
   DELETE_BIN: "ลบถังขยะ",
   LOCK: "ส่งคำสั่งล็อก",
   UNLOCK: "ส่งคำสั่งปลดล็อก",
+  UPDATE_SETTINGS: "แก้ไขการตั้งค่า",
+  TEST_LINE: "ทดสอบ LINE",
 };
 
 interface AuditLog {
@@ -50,7 +52,9 @@ interface AuditLog {
     | "UPDATE_BIN"
     | "DELETE_BIN"
     | "LOCK"
-    | "UNLOCK";
+    | "UNLOCK"
+    | "UPDATE_SETTINGS"
+    | "TEST_LINE";
   binId?: string;
   binName?: string;
   ip?: string;
@@ -106,7 +110,7 @@ export default function LogsPage() {
     if (!accessToken || invalidRange) return;
     setExporting(true);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_URL}/api/logs/export?${filterParams()}`,
         { headers: { Authorization: `Bearer ${accessToken}` } },
       );
@@ -157,7 +161,7 @@ export default function LogsPage() {
       params.set("page", String(page));
       params.set("limit", "20");
 
-      const response = await fetch(`${API_URL}/api/logs?${params.toString()}`, {
+      const response = await apiFetch(`${API_URL}/api/logs?${params.toString()}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -545,41 +549,16 @@ export default function LogsPage() {
                 ← เลื่อนตารางซ้าย-ขวาเพื่อดูข้อมูลเพิ่ม →
               </div>
 
-              {pagination && (
-                <div className="flex flex-col gap-4 border-t border-[#212b3d] p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-slate-400 sm:text-sm">
-                    หน้า {pagination.page} /{" "}
-                    {Math.max(pagination.totalPages, 1)}
-                    <span className="mx-2 text-slate-600">•</span>
-                    ทั้งหมด {pagination.total} รายการ
-                  </p>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={!pagination.hasPreviousPage || loading}
-                      onClick={() =>
-                        setPage((current) => Math.max(current - 1, 1))
-                      }
-                      className="inline-flex items-center gap-1 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-[#212b3d] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 sm:text-sm"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      <span>ก่อนหน้า</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={!pagination.hasNextPage || loading}
-                      onClick={() => setPage((current) => current + 1)}
-                      className="inline-flex items-center gap-1 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-[#212b3d] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 sm:text-sm"
-                    >
-                      <span>ถัดไป</span>
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
+          )}
+          {pagination && (
+            <PaginationControls
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              disabled={loading}
+              onPageChange={setPage}
+            />
           )}
         </div>
       </div>
@@ -696,6 +675,14 @@ function ActionBadge({ action }: { action: string }) {
     case "UNLOCK":
       colorStyle = "bg-teal-500/10 text-teal-400 border-teal-500/30";
       Icon = Unlock;
+      break;
+    case "UPDATE_SETTINGS":
+      colorStyle = "bg-amber-500/10 text-amber-400 border-amber-500/30";
+      Icon = Edit;
+      break;
+    case "TEST_LINE":
+      colorStyle = "bg-sky-500/10 text-sky-400 border-sky-500/30";
+      Icon = Activity;
       break;
   }
 

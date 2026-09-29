@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -123,7 +124,7 @@ export default function BinDevicesPage() {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_URL}/api/device/bin/${encodeURIComponent(binId)}`,
           {
             headers: {
@@ -295,7 +296,7 @@ export default function BinDevicesPage() {
         )}`
         : `${API_URL}/api/device`;
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: isEditing ? "PUT" : "POST",
 
         headers: {
@@ -404,7 +405,7 @@ export default function BinDevicesPage() {
     if (!result.isConfirmed) return;
 
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_URL}/api/device/${encodeURIComponent(
           device.deviceId,
         )}`,

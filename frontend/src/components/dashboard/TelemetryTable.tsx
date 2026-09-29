@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -19,8 +20,15 @@ function formatDate(value: string) {
 
 function SensorBadge({ value }: { value?: string }) {
   const status = value || "unknown";
-  const color = status === "ok" ? "text-emerald-400 bg-emerald-500/10" : status === "warning" ? "text-amber-400 bg-amber-500/10" : "text-slate-400 bg-slate-500/10";
-  return <span className={`rounded-full px-2.5 py-1 text-xs ${color}`}>{status}</span>;
+  const labels: Record<string, string> = {
+    ok: "ทำงานปกติ",
+    warning: "ควรตรวจสอบ",
+    error: "ขัดข้อง",
+    offline: "ไม่เชื่อมต่อ",
+    unknown: "ไม่ทราบสถานะ",
+  };
+  const color = status === "ok" ? "text-emerald-400 bg-emerald-500/10" : status === "warning" ? "text-amber-400 bg-amber-500/10" : status === "error" ? "text-rose-400 bg-rose-500/10" : "text-slate-400 bg-slate-500/10";
+  return <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs ${color}`}>{labels[status] ?? labels.unknown}</span>;
 }
 
 export default function TelemetryTable({ binId }: { binId?: string }) {
@@ -39,7 +47,7 @@ export default function TelemetryTable({ binId }: { binId?: string }) {
     if (silent) setRefreshing(true);
     else setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/telemetry?page=1&limit=10`, {
+      const response = await apiFetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/telemetry?page=1&limit=10`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
         signal,

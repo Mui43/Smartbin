@@ -2,6 +2,8 @@ import { Alert } from "../models/alert.js";
 import { sendLineMessage } from "../services/line.js";
 import { checkBinAlerts } from "./checkAlerts.js";
 import { Bin } from "../models/bin.js";
+import { getMonitoringSettings } from "../services/monitoringSettings.js";
+import { shouldSendLineAlert } from "./shouldSendLineAlert.js";
 
 const checkingBins = new Set<string>();
 const RETRY_MS = 60_000;
@@ -25,7 +27,8 @@ export async function notifyBinAlerts(binId: string) {
   try {
     console.log(`🔎 Checking alerts for ${binId}`);
 
-    const currentAlerts = await checkBinAlerts(binId);
+    const settings = await getMonitoringSettings();
+    const currentAlerts = await checkBinAlerts(binId, settings);
 
     console.log(
       `🚨 Current alerts: ${currentAlerts.length}`
@@ -73,7 +76,7 @@ export async function notifyBinAlerts(binId: string) {
       });
 
       // มี Alert เดิมอยู่แล้ว
-      if (existingAlert?.sentToLine || (existingAlert?.lineLastAttemptAt && Date.now() - existingAlert.lineLastAttemptAt.getTime() < RETRY_MS)) {
+      if (!shouldSendLineAlert(existingAlert, settings.reminderIntervalMinutes)) {
         console.log(
           `ℹ️ Alert already active: ${binId} ${alert.type}`
         );

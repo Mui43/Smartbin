@@ -22,6 +22,7 @@ import dashboardRouter from "./routes/dashboard.js";
 import deviceRouter from "./routes/device.js";
 import wasteStatsRouter from "./routes/wasteStats.js";
 import deviceHeartbeatRouter from "./routes/deviceHeartbeat.js";
+import settingsRouter from "./routes/settings.js";
 
 import { startMqtt } from "./mqtt/client.js";
 
@@ -89,6 +90,7 @@ app.use("/api/waste-stats", wasteStatsRouter);
 app.use("/api/device", deviceRouter);
 
 app.use("/api/device/heartbeat", deviceHeartbeatRouter);
+app.use("/api/settings", settingsRouter);
 
 // ==================================
 // 404

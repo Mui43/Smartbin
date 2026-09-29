@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import {
   useCallback,
@@ -215,7 +216,7 @@ export default function DeviceDetailPage() {
         setError("");
 
         const response =
-          await fetch(
+          await apiFetch(
             `${API_URL}/api/device/${encodeURIComponent(
               deviceId
             )}`,
