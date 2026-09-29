@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
@@ -28,7 +29,7 @@ export default function LockControl({ binId }: { binId: string }) {
 
     async function refresh() {
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_URL}/api/bins/${encodeURIComponent(binId)}/lock`,
           {
             headers: {
@@ -135,7 +136,7 @@ export default function LockControl({ binId }: { binId: string }) {
     waitingSince.current = Date.now();
 
     try {
-      const response = await fetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/lock`, {
+      const response = await apiFetch(`${API_URL}/api/bins/${encodeURIComponent(binId)}/lock`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import {
   useEffect,
@@ -16,8 +17,6 @@ import {
   CheckCircle2,
   Search,
   RefreshCw,
-  ChevronLeft,
-  ChevronRight,
   Check,
   RotateCcw,
   X,
@@ -25,6 +24,7 @@ import {
 
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import PaginationControls from "@/components/ui/PaginationControls";
 
 /* ==================================================
    Types & Interfaces
@@ -131,7 +131,7 @@ export default function NotificationsPage() {
         if (type) params.set("type", type);
         if (active !== "") params.set("active", active);
 
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_URL}/api/alerts/history?${params.toString()}`,
           {
             headers: {
@@ -449,18 +449,16 @@ export default function NotificationsPage() {
                 ))}
               </div>
 
-              {/* Pagination Controls */}
-              {pagination && (
-                <PaginationControls
-                  page={pagination.page}
-                  totalPages={pagination.totalPages}
-                  hasPrevious={pagination.hasPreviousPage}
-                  hasNext={pagination.hasNextPage}
-                  onPrevious={() => setPage((prev) => Math.max(prev - 1, 1))}
-                  onNext={() => setPage((prev) => prev + 1)}
-                />
-              )}
             </>
+          )}
+          {pagination && (
+            <PaginationControls
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              onPageChange={setPage}
+              disabled={isFetching || isPending}
+              totalItems={pagination.total}
+            />
           )}
         </section>
       </div>
@@ -631,50 +629,6 @@ function EmptyAlerts() {
       <p className="mt-1 text-sm text-slate-400">
         ไม่พบการแจ้งเตือนตามเงื่อนไขที่เลือก
       </p>
-    </div>
-  );
-}
-
-function PaginationControls({
-  page,
-  totalPages,
-  hasPrevious,
-  hasNext,
-  onPrevious,
-  onNext,
-}: {
-  page: number;
-  totalPages: number;
-  hasPrevious: boolean;
-  hasNext: boolean;
-  onPrevious: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between border-t border-[#212b3d] p-4 sm:p-5">
-      <button
-        type="button"
-        onClick={onPrevious}
-        disabled={!hasPrevious}
-        className="flex items-center gap-1 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-3.5 py-2 text-sm font-medium text-slate-300 transition hover:bg-[#212b3d] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        <span>Previous</span>
-      </button>
-
-      <span className="text-xs text-slate-400 sm:text-sm">
-        Page {page} / {Math.max(totalPages, 1)}
-      </span>
-
-      <button
-        type="button"
-        onClick={onNext}
-        disabled={!hasNext}
-        className="flex items-center gap-1 rounded-xl border border-[#212b3d] bg-[#0a0d14] px-3.5 py-2 text-sm font-medium text-slate-300 transition hover:bg-[#212b3d] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-      >
-        <span>Next</span>
-        <ChevronRight className="h-4 w-4" />
-      </button>
     </div>
   );
 }

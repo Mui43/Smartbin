@@ -10,7 +10,9 @@ export type AuditAction =
   | "UPDATE_BIN"
   | "DELETE_BIN"
   | "LOCK"
-  | "UNLOCK";
+  | "UNLOCK"
+  | "UPDATE_SETTINGS"
+  | "TEST_LINE";
 
 export interface IAuditLog extends Document {
   userId?: string;
@@ -52,6 +54,8 @@ const auditLogSchema = new Schema<IAuditLog>(
         "DELETE_BIN",
         "LOCK",
         "UNLOCK",
+        "UPDATE_SETTINGS",
+        "TEST_LINE",
       ],
       required: true,
       index: true,

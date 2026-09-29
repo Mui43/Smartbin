@@ -1,3 +1,5 @@
+import { getMonitoringSettings } from "./monitoringSettings.js";
+
 const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
 
 const LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply";
@@ -6,9 +8,9 @@ export type LineMessage =
   | { type: "text"; text: string }
   | { type: "flex"; altText: string; contents: Record<string, unknown> };
 
-/** Push text to LINE_TARGET_USER_ID; reject if the recipient is missing or delivery fails. */
+/** Push text to the configured alert recipient; reject if delivery fails. */
 export async function sendLineMessage(message: string) {
-  const userId = process.env.LINE_TARGET_USER_ID?.trim();
+  const userId = (await getMonitoringSettings()).lineTargetId;
   if (!userId) throw new Error("LINE Target User ID missing");
   return sendLineMessageTo(userId, message);
 }

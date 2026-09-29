@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -77,7 +78,7 @@ export function useTelemetryHistory(
           params.set("endDate", endDate);
         }
 
-        const response = await fetch(
+        const response = await apiFetch(
           `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/bins/${encodeURIComponent(binId)}/telemetry?${params.toString()}`,
           {
             method: "GET",

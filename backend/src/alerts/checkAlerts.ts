@@ -1,5 +1,6 @@
 import { Telemetry } from "../models/telemetry.js";
 import { Bin } from "../models/bin.js";
+import { getMonitoringSettings, type AlertSettings } from "../services/monitoringSettings.js";
 
 export interface BinAlert {
   type:
@@ -15,9 +16,11 @@ export interface BinAlert {
 }
 
 export async function checkBinAlerts(
-  binId: string
+  binId: string,
+  alertSettings?: AlertSettings,
 ): Promise<BinAlert[]> {
   const alerts: BinAlert[] = [];
+  const settings = alertSettings ?? await getMonitoringSettings();
 
   const bin = await Bin.findOne({ binId }).lean();
 
@@ -33,11 +36,13 @@ export async function checkBinAlerts(
     .lean();
 
   if (!telemetry) {
-    alerts.push({
-      type: "OFFLINE",
-      level: "critical",
-      message: "ไม่พบข้อมูลจากถัง",
-    });
+    if (Date.now() - new Date(bin.createdAt).getTime() > settings.offlineAfterSeconds * 1000) {
+      alerts.push({
+        type: "OFFLINE",
+        level: "critical",
+        message: `ไม่พบข้อมูลจากถังเกิน ${settings.offlineAfterSeconds} วินาที`,
+      });
+    }
 
     return alerts;
   }
@@ -93,7 +98,7 @@ export async function checkBinAlerts(
   // LOW BATTERY
   // =========================
 
-  if (telemetry.batteryPct <= 20) {
+  if (typeof telemetry.batteryPct === "number" && Number.isFinite(telemetry.batteryPct) && telemetry.batteryPct <= settings.lowBatteryPct) {
     alerts.push({
       type: "LOW_BATTERY",
       level: "warning",
@@ -111,13 +116,13 @@ export async function checkBinAlerts(
   const now = Date.now();
 
   const offline =
-    now - lastSeen > 60 * 1000;
+    now - lastSeen > settings.offlineAfterSeconds * 1000;
 
   if (offline) {
     alerts.push({
       type: "OFFLINE",
       level: "critical",
-      message: "ถังไม่ได้ส่งข้อมูลเกิน 60 วินาที",
+      message: `ถังไม่ได้ส่งข้อมูลเกิน ${settings.offlineAfterSeconds} วินาที`,
     });
   }
 

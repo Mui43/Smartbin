@@ -7,6 +7,7 @@ import { Device } from "../models/device.js";
 import { broadcastRealtime } from "../routes/realtime.js";
 
 import { notifyBinAlerts } from "../alerts/notifyAlerts.js";
+import { getMonitoringSettings } from "../services/monitoringSettings.js";
 
 let mqttClient: mqtt.MqttClient | null = null;
 
@@ -125,7 +126,7 @@ async function updateDeviceStatuses(
  *
  * A device becomes offline when:
  * - current status = online
- * - lastSeen is older than 60 seconds
+ * - lastSeen is older than the configured offline threshold
  *
  * Checker runs every 30 seconds.
  */
@@ -137,8 +138,9 @@ function startOfflineChecker() {
   offlineChecker = setInterval(
     async () => {
       try {
+        const settings = await getMonitoringSettings();
         const timeout = new Date(
-          Date.now() - 60 * 1000
+          Date.now() - settings.offlineAfterSeconds * 1000
         );
 
         const devices =

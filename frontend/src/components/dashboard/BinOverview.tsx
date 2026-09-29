@@ -17,8 +17,10 @@ interface TelemetryData {
 
 export default function BinOverview({
   telemetry,
+  binName,
 }: {
   telemetry: TelemetryData;
+  binName: string;
 }) {
   const level = Math.min(Math.max(telemetry.level, 0), 100);
 
@@ -47,7 +49,7 @@ export default function BinOverview({
           Overview
         </p>
         <h2 className="mt-1 text-2xl font-bold tracking-tight text-white">
-          {telemetry.binId}
+          {binName}
         </h2>
       </div>
 

@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useState } from "react";
 
@@ -51,7 +52,7 @@ export function useWasteStats(
           params.set("month", month);
         }
 
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_URL}/api/waste-stats?${params}`,
           {
             signal: controller.signal,

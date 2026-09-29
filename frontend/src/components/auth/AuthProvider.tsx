@@ -1,6 +1,7 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import TokenExpiryWatcher from "./TokenExpiryWatcher";
 
 export default function AuthProvider({
   children,
@@ -9,6 +10,7 @@ export default function AuthProvider({
 }) {
   return (
     <SessionProvider>
+      <TokenExpiryWatcher />
       {children}
     </SessionProvider>
   );

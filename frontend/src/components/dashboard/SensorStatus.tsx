@@ -1,7 +1,9 @@
 "use client";
+import { apiFetch } from "@/lib/apiFetch";
 
 import { useEffect, useState } from "react";
 import { Cpu, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import type { TelemetryData } from "@/hooks/useTelemetry";
 
 type Device = {
@@ -13,12 +15,12 @@ type Device = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-const MAX_AGE_MS = 60_000;
+const DEFAULT_MAX_AGE_MS = 60_000;
 
-function isFresh(value: string | null | undefined, now: number) {
+function isFresh(value: string | null | undefined, now: number, maxAgeMs: number) {
   if (!value) return false;
   const age = now - new Date(value).getTime();
-  return Number.isFinite(age) && age >= 0 && age <= MAX_AGE_MS;
+  return Number.isFinite(age) && age >= 0 && age <= maxAgeMs;
 }
 
 export default function SensorStatus({
@@ -34,13 +36,14 @@ export default function SensorStatus({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [maxAgeMs, setMaxAgeMs] = useState(DEFAULT_MAX_AGE_MS);
 
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
       if (!accessToken) return;
       try {
-        const response = await fetch(`${API_URL}/api/device/bin/${encodeURIComponent(binId)}`, {
+        const response = await apiFetch(`${API_URL}/api/device/bin/${encodeURIComponent(binId)}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
           cache: "no-store",
           signal: controller.signal,
@@ -63,6 +66,18 @@ export default function SensorStatus({
     }
 
     load();
+    if (accessToken) {
+      void apiFetch(`${API_URL}/api/settings`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+        signal: controller.signal,
+      }).then((response) => response.json()).then((result) => {
+        const seconds = result?.data?.alerts?.offlineAfterSeconds;
+        if (!controller.signal.aborted && Number.isInteger(seconds) && seconds >= 30) {
+          setMaxAgeMs(seconds * 1000);
+        }
+      }).catch(() => { /* The default remains in use until settings can be read. */ });
+    }
     const poll = window.setInterval(load, 15_000);
     const clock = window.setInterval(() => setNow(Date.now()), 5_000);
     const events = new EventSource(`${API_URL}/api/realtime`);
@@ -96,7 +111,7 @@ export default function SensorStatus({
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500">Monitoring</p>
           <h2 className="mt-1 text-xl font-bold text-white">Sensor Status</h2>
-          <p className="mt-1 text-xs text-slate-400">ตรวจจากสัญญาณและข้อมูลที่อุปกรณ์ส่งมาภายใน 60 วินาที</p>
+          <p className="mt-1 text-xs text-slate-400">ถัง {binId} · ตรวจจากสัญญาณและข้อมูลที่อุปกรณ์ส่งมาภายใน {maxAgeMs / 1000} วินาที</p>
         </div>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#212b3d] bg-[#0a0d14] text-slate-400">
           <Cpu size={20} />
@@ -105,17 +120,17 @@ export default function SensorStatus({
       {error && <p role="alert" className="mb-4 text-sm text-rose-400">{error}</p>}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sensors.map((sensor) => {
-          const device = devices.find((item) => item.type === sensor.type && item.status === "online" && isFresh(item.lastSeen, now))
+          const device = devices.find((item) => item.type === sensor.type && item.status === "online" && isFresh(item.lastSeen, now, maxAgeMs))
             ?? devices.find((item) => item.type === sensor.type);
-          const fresh = device?.status === "online" && isFresh(device.lastSeen, now);
+          const fresh = device?.status === "online" && isFresh(device.lastSeen, now, maxAgeMs);
           const reading = sensor.hasDetection
             ? device?.state === "on" ? "ตรวจพบวัตถุ" : device?.state === "off" ? "ไม่พบวัตถุ" : "ยังไม่มีค่าจากเซนเซอร์"
-            : isFresh(telemetry?.timestamp, now) && Number.isFinite(telemetry?.level)
+            : isFresh(telemetry?.timestamp, now, maxAgeMs) && Number.isFinite(telemetry?.level)
               ? `ระดับขยะ ${telemetry?.level}%`
               : "ยังไม่มีค่าระดับขยะล่าสุด";
           const hasReading = sensor.hasDetection
             ? device?.state === "on" || device?.state === "off"
-            : isFresh(telemetry?.timestamp, now) && Number.isFinite(telemetry?.level);
+            : isFresh(telemetry?.timestamp, now, maxAgeMs) && Number.isFinite(telemetry?.level);
           const state = loading ? "loading" : error ? "error" : !device ? "missing" : !fresh ? "offline" : !hasReading || device.status === "warning" ? "warning" : "online";
           const color = state === "online" ? "text-emerald-400" : state === "warning" ? "text-amber-400" : state === "loading" ? "text-slate-400" : "text-rose-400";
           const label = state === "online" ? "กำลังรายงานค่า" : state === "warning" ? "ข้อมูลไม่ครบ" : state === "missing" ? "ยังไม่ลงทะเบียน" : state === "loading" ? "กำลังโหลด" : state === "error" ? "ตรวจสอบไม่ได้" : "ขาดการเชื่อมต่อ";
@@ -126,8 +141,13 @@ export default function SensorStatus({
                 <span className={`text-xs font-semibold ${color}`}>{state === "loading" && <RefreshCw className="inline h-3 w-3 animate-spin" />} {label}</span>
               </div>
               <p className={`mt-4 text-sm ${fresh ? "text-slate-300" : "text-slate-500"}`}>
-                {state === "error" ? "โหลดสถานะจาก Backend ไม่สำเร็จ" : fresh ? reading : state === "missing" ? "ไม่มีอุปกรณ์ชนิดนี้ในถัง" : "ไม่มีสัญญาณล่าสุดจากอุปกรณ์"}
+                {state === "error" ? "โหลดสถานะจาก Backend ไม่สำเร็จ" : fresh ? reading : state === "missing" ? `ไม่พบ ${sensor.name} ที่ลงทะเบียนกับถัง ${binId}` : "ไม่มีสัญญาณล่าสุดจากอุปกรณ์"}
               </p>
+              {state === "missing" && (
+                <Link href={`/devices/${encodeURIComponent(binId)}`} className="mt-2 inline-block text-xs font-medium text-emerald-400 hover:underline">
+                  ตรวจสอบอุปกรณ์ของถังนี้
+                </Link>
+              )}
               {device?.lastSeen && <p className="mt-2 text-xs text-slate-500">ส่งสัญญาณล่าสุด {new Date(device.lastSeen).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" })}</p>}
             </div>
           );
